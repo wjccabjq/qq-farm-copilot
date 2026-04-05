@@ -14,9 +14,9 @@ from core.engine.task.registry import (
     TaskResult,
     TaskSnapshot,
 )
-from core.tasks.farm_main import TaskFarmMain
-from core.tasks.friend import TaskFriend
-from core.tasks.share import TaskShare
+from tasks.farm_main import TaskFarmMain
+from tasks.friend import TaskFriend
+from tasks.share import TaskShare
 from models.config import TaskTriggerType
 
 

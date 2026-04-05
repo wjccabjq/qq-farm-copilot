@@ -8,11 +8,11 @@ from loguru import logger
 
 from core.engine.task.registry import TaskResult
 from core.base.step_result import StepResult
-from core.tasks.farm_friend import TaskFarmFriend
-from core.tasks.farm_harvest import TaskFarmHarvest
-from core.tasks.farm_plant import TaskFarmPlant
-from core.tasks.farm_reward import TaskFarmReward
-from core.tasks.farm_sell import TaskFarmSell
+from tasks.farm_friend import TaskFarmFriend
+from tasks.farm_harvest import TaskFarmHarvest
+from tasks.farm_plant import TaskFarmPlant
+from tasks.farm_reward import TaskFarmReward
+from tasks.farm_sell import TaskFarmSell
 from core.ui.page import (
     GOTO_MAIN,
     page_friend,

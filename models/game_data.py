@@ -45,12 +45,12 @@ def _calc_grow_time_seconds(grow_phases: str, seasons: int) -> int:
 
 
 def _load_crops_from_plant_json() -> list[tuple]:
-    """Build CROPS tuple list from `models/Plant.json`.
+    """Build CROPS tuple list from `configs/Plant.json`.
 
     Tuple format:
       (name, seed_id, land_level_need, grow_time_seconds, exp, fruit_count)
     """
-    plant_path = Path(__file__).resolve().parent / 'Plant.json'
+    plant_path = Path(__file__).resolve().parent.parent / 'configs' / 'Plant.json'
     data = json.loads(plant_path.read_text(encoding='utf-8'))
 
     crops: list[tuple] = []

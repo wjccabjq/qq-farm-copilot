@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from core.base.timer import Timer
-from core.handler.info_handler import InfoHandler
+from tasks.info_handler import InfoHandler
 from core.ui.page import *
 
 if TYPE_CHECKING:

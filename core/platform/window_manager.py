@@ -36,7 +36,7 @@ class WindowManager:
     TARGET_CLIENT_WIDTH = 540
     TARGET_CLIENT_HEIGHT = 960
     _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-    _NONCLIENT_JSON_PATH = _PROJECT_ROOT / 'models' / 'nonclient_metrics.json'
+    _NONCLIENT_JSON_PATH = _PROJECT_ROOT / 'configs' / 'nonclient_metrics.json'
     _MONITOR_DEFAULTTONEAREST = 2
     _SWP_NOZORDER = 0x0004
     _SWP_NOOWNERZORDER = 0x0200
