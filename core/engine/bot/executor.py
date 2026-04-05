@@ -249,7 +249,7 @@ class BotExecutorMixin:
             return TaskResult(success=False, actions=[], next_run_seconds=5, error='UI未初始化')
         self._reset_device_runtime_guards()
         task = TaskFarmMain(engine=self, ui=self.ui)
-        return task.run(session_id=self._session_id)
+        return task.run()
 
     def _run_task_friend(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_friend` 子流程。"""
@@ -257,7 +257,7 @@ class BotExecutorMixin:
             return TaskResult(success=False, actions=[], next_run_seconds=5, error='UI未初始化')
         self._reset_device_runtime_guards()
         task = TaskFriend(engine=self, ui=self.ui)
-        return task.run(session_id=self._session_id)
+        return task.run()
 
     def _run_task_share(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_share` 子流程。"""
@@ -265,7 +265,7 @@ class BotExecutorMixin:
             return TaskResult(success=False, actions=[], next_run_seconds=5, error='UI未初始化')
         self._reset_device_runtime_guards()
         task = TaskShare(engine=self, ui=self.ui)
-        return task.run(session_id=self._session_id)
+        return task.run()
 
     def _on_executor_snapshot(self, snapshot: TaskSnapshot):
         """接收执行器快照并更新 GUI 统计面板。"""
@@ -305,8 +305,6 @@ class BotExecutorMixin:
     def _on_executor_idle(self):
         """执行器空闲时触发：按策略尝试回主界面。"""
         if not self._accept_executor_events:
-            return
-        if self._is_cancel_requested():
             return
         if not self.ui:
             return

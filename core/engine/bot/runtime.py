@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 import time
 
 from loguru import logger
@@ -22,39 +21,6 @@ from utils.template_paths import normalize_template_platform
 
 class BotRuntimeMixin:
     """Bot 生命周期与运行态控制逻辑。"""
-
-    def _switch_session(self, cancelled: bool) -> int:
-        """切换到新会话，旧会话结果自动作废。"""
-        self._session_id += 1
-        self._cancel_event = threading.Event()
-        if cancelled:
-            self._cancel_event.set()
-        return self._session_id
-
-    def _is_cancel_requested(self, session_id: int | None = None) -> bool:
-        """判断是否满足 `cancel_requested` 条件。"""
-        if session_id is not None and session_id != self._session_id:
-            return True
-        if self._task_executor and self._task_executor.is_stop_requested():
-            return True
-        return self._cancel_event.is_set()
-
-    def is_session_cancelled(self, session_id: int) -> bool:
-        """对外暴露：判断指定会话是否已取消。"""
-        return self._is_cancel_requested(session_id)
-
-    def _sleep_interruptible(self, seconds: float, session_id: int | None = None, interval: float = 0.02) -> bool:
-        """可中断睡眠：检测到取消请求时提前返回 False。"""
-        if seconds <= 0:
-            return not self._is_cancel_requested(session_id)
-        end_at = time.perf_counter() + seconds
-        while True:
-            if self._is_cancel_requested(session_id):
-                return False
-            remain = end_at - time.perf_counter()
-            if remain <= 0:
-                return True
-            time.sleep(min(interval, remain))
 
     def update_config(self, config: AppConfig):
         """更新配置并将变更同步到执行器。"""
@@ -82,21 +48,16 @@ class BotRuntimeMixin:
                 logger.info(f'策略选择: {best[0]} (经验效率 {best[4] / best[3]:.4f}/秒)')
         return crop_name
 
-    def _clear_screen(self, rect: tuple, session_id: int | None = None):
+    def _clear_screen(self, rect: tuple):
         """通过 GOTO_MAIN 连续点击 2 次，尽量回到稳定主界面。"""
         if not self.action_executor:
             return
 
         goto_x, goto_y = GOTO_MAIN.location
         for _ in range(2):
-            if self._is_cancel_requested(session_id):
-                break
             if self.device:
                 self.device.click_point(goto_x, goto_y, desc='goto_main')
-            if self._is_cancel_requested(session_id):
-                break
-            if not self._sleep_interruptible(0.3, session_id):
-                break
+            time.sleep(0.3)
 
     def resolve_capture_point(
         self,
@@ -143,7 +104,6 @@ class BotRuntimeMixin:
             self.log_message.emit('上一轮任务仍在停止中，请稍候再启动')
             return False
         # [启动阶段] 重置运行会话与计数器。
-        self._switch_session(cancelled=False)
         self._runtime_failure_count = 0
         current_platform = getattr(self.config.planting, 'window_platform', 'qq')
         current_platform_value = current_platform.value if hasattr(current_platform, 'value') else str(current_platform)
@@ -164,7 +124,7 @@ class BotRuntimeMixin:
         platform = getattr(self.config.planting, 'window_platform', 'qq')
         platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         self.window_manager.resize_window(pos_value, platform_value)
-        self._sleep_interruptible(0.5)
+        time.sleep(0.5)
         window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
         self.log_message.emit(
             f'窗口已调整（整窗外框目标：540x960 + 非客户区增量）-> 实际外框 {window.width}x{window.height}'
@@ -180,7 +140,6 @@ class BotRuntimeMixin:
             click_offset=self.config.safety.click_offset_range,
         )
         # [适配层阶段] 构建设备/UI/任务对象，供执行器回调使用。
-        self.action_executor.set_cancel_checker(self._is_cancel_requested)
         self.device = Device(engine=self)
         self.device.set_rect(rect)
         self.ui = UI(
@@ -188,7 +147,6 @@ class BotRuntimeMixin:
             detector=self.cv_detector,
             device=self.device,
             crop_name_resolver=self._resolve_crop_name_quiet,
-            cancel_checker=self._is_cancel_requested,
         )
 
         self.scheduler.stop()
@@ -210,7 +168,6 @@ class BotRuntimeMixin:
 
     def stop(self):
         """停止当前模块并释放运行状态。"""
-        self._switch_session(cancelled=True)
         self._stop_executor()
         self.ui = None
         self.device = None

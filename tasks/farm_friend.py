@@ -29,7 +29,7 @@ class TaskFarmFriend:
             return StepResult()
         if not self.ui.appear_then_click(BTN_FRIEND_HELP, offset=(30, 30), interval=1, threshold=0.8, static=False):
             return StepResult()
-        self.engine._sleep_interruptible(0.4)
+        self.ui.device.sleep(0.4)
         out = StepResult.from_value(self.help_in_friend_farm(rect))
         return out
 
@@ -39,9 +39,6 @@ class TaskFarmFriend:
         idle_rounds = 0
 
         for _ in range(12):
-            if self.engine._is_cancel_requested():
-                break
-
             cv_img = self.ui.device.screenshot(rect=rect, save=False)
             if cv_img is None:
                 break
@@ -56,7 +53,7 @@ class TaskFarmFriend:
                     continue
                 actions_done.append(desc)
                 acted = True
-                self.engine._sleep_interruptible(0.3)
+                self.ui.device.sleep(0.3)
                 break
 
             if acted:
@@ -65,19 +62,19 @@ class TaskFarmFriend:
 
             if self.ui.appear_then_click(BTN_HOME, offset=(30, 30), interval=1, threshold=0.8, static=False):
                 actions_done.append('回家')
-                self.engine._sleep_interruptible(0.3)
+                self.ui.device.sleep(0.3)
                 break
 
             if self.ui.appear_then_click_any(
                 [BTN_CLAIM, BTN_CONFIRM, BTN_CLOSE], offset=(30, 30), interval=1, threshold=0.8, static=False
             ):
-                self.engine._sleep_interruptible(0.2)
+                self.ui.device.sleep(0.2)
                 continue
 
             idle_rounds += 1
             if idle_rounds >= 2:
                 break
-            self.engine._sleep_interruptible(0.2)
+            self.ui.device.sleep(0.2)
 
         return actions_done
 

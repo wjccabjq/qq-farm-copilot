@@ -34,17 +34,11 @@ class UI(InfoHandler):
         detector,
         device: Device,
         crop_name_resolver: Callable[[], str],
-        cancel_checker: Callable[[], bool],
     ):
         """初始化对象并准备运行所需状态。"""
         super().__init__(config=config, detector=detector, device=device)
         self._crop_name_resolver = crop_name_resolver
-        self._cancel_checker = cancel_checker
         self.ui_current: Page = page_unknown
-
-    def _is_cancelled(self) -> bool:
-        """判断是否满足 `cancelled` 条件。"""
-        return bool(self._cancel_checker and self._cancel_checker())
 
     def ui_page_appear(self, page: Page):
         """判断某个页面是否出现（支持单按钮或多按钮联合判定）。"""
@@ -63,8 +57,6 @@ class UI(InfoHandler):
         deadline = Timer(timeout, count=1).start()
 
         while True:
-            if self._is_cancelled():
-                return page_unknown
             # 首轮尽量复用已有截图，减少无意义截屏。
             if skip_first_screenshot:
                 skip_first_screenshot = False
@@ -139,8 +131,6 @@ class UI(InfoHandler):
         confirm_timer = Timer(confirm_wait, count=max(1, int(confirm_wait // 0.5) or 1)).start()
         timeout = Timer(6.0, count=1).start()
         while True:
-            if self._is_cancelled():
-                return False
             if skip_first_screenshot:
                 skip_first_screenshot = False
             else:
@@ -210,8 +200,6 @@ class UI(InfoHandler):
         confirm_timer = Timer(1.5, count=2)
         overall_timer = Timer(2.0)
         while True:
-            if self._is_cancelled():
-                return False
             self.device.screenshot()
             if self.ui_additional():
                 if not confirm_timer.started():

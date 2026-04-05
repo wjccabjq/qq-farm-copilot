@@ -44,12 +44,9 @@ class TaskFarmMain:
         self.task_reward = TaskFarmReward(engine, ui)
         self.task_friend = TaskFarmFriend(engine, ui)
 
-    def run(self, session_id: int | None = None) -> TaskResult:
+    def run(self) -> TaskResult:
         """执行当前模块主流程并返回结果。"""
         result = TaskResult(success=False, actions=[], next_run_seconds=None, error='')
-        if self.engine._is_cancel_requested(session_id):
-            result.error = '停止中'
-            return result
 
         # [准备阶段] 同步窗口与 UI 状态，确保从主界面开始执行。
         features = self.engine.get_task_features('farm_main')
@@ -59,11 +56,11 @@ class TaskFarmMain:
             return result
         self.ui.device.set_rect(rect)
 
-        self.engine._clear_screen(rect, session_id)
+        self.engine._clear_screen(rect)
         self.ui.ui_ensure(page_main, confirm_wait=0.5)
 
         # [巡查阶段] 先做自家农场维护（收获/除草/除虫/浇水）。
-        patrol_actions = self._run_self_farm_patrol(rect=rect, features=features, session_id=session_id)
+        patrol_actions = self._run_self_farm_patrol(rect=rect, features=features)
         if patrol_actions:
             result.actions.extend(patrol_actions)
 
@@ -75,10 +72,6 @@ class TaskFarmMain:
 
         # [主循环阶段] 按页面识别结果驱动任务分发，直到达到预算或进入空闲。
         while tick < transition_budget:
-            if self.engine._is_cancel_requested(session_id):
-                logger.info('收到停止/暂停信号，中断当前操作')
-                break
-
             tick_start = time.perf_counter()
             detect_start = time.perf_counter()
 
@@ -93,20 +86,18 @@ class TaskFarmMain:
                 recovered = self.ui.ui_goto(page_main, confirm_wait=0.5, skip_first_screenshot=True)
                 if recovered:
                     result.actions.append('导航回主界面')
-                    if not self.engine._sleep_interruptible(0.2, session_id):
-                        break
+                    self.ui.device.sleep(0.2)
                     continue
-                self._click_goto_main(rect)
+                x, y = self.engine._resolve_goto_main_point(rect)
+                self.engine.device.click_point(x, y, desc=GOTO_MAIN.name)
                 result.actions.append('点击回主按钮')
-                if not self.engine._sleep_interruptible(0.2, session_id):
-                    break
+                self.ui.device.sleep(0.2)
                 continue
 
             if self.ui.ui_additional():
                 # 弹窗处理命中后立即进入下一轮，避免污染当前页面判断。
                 result.actions.append('处理弹窗')
-                if not self.engine._sleep_interruptible(0.2, session_id):
-                    break
+                self.ui.device.sleep(0.2)
                 continue
 
             tick += 1
@@ -157,12 +148,12 @@ class TaskFarmMain:
             else:
                 idle_rounds += 1
                 if idle_rounds == 1:
-                    self._click_goto_main(rect)
+                    x, y = self.engine._resolve_goto_main_point(rect)
+                    self.engine.device.click_point(x, y, desc=GOTO_MAIN.name)
                 elif idle_rounds >= max_idle:
                     break
 
-            if not self.engine._sleep_interruptible(0.3, session_id):
-                break
+            self.ui.device.sleep(0.3)
         else:
             logger.info(f'达到页面跳转预算上限: {transition_budget}，结束本轮')
 
@@ -201,32 +192,26 @@ class TaskFarmMain:
         self,
         rect: tuple[int, int, int, int],
         features: dict,
-        session_id: int | None,
     ) -> list[str]:
         """自家农场巡查阶段：收获/除草/除虫/浇水，独立于主流程分发。"""
         actions: list[str] = []
         max_rounds = 8
 
         for _ in range(max_rounds):
-            if self.engine._is_cancel_requested(session_id):
-                break
-
             cv_image = self.ui.device.screenshot(rect=rect, save=False)
             if cv_image is None:
                 break
 
             if self.ui.ui_additional():
                 actions.append('处理弹窗')
-                if not self.engine._sleep_interruptible(0.2, session_id):
-                    break
+                self.ui.device.sleep(0.2)
                 continue
 
             page = self.ui.ui_get_current_page(skip_first_screenshot=True, timeout=0.9)
             if page != page_main:
                 if self.ui.ui_goto(page_main, confirm_wait=0.4, skip_first_screenshot=True):
                     actions.append('导航回主界面')
-                    if not self.engine._sleep_interruptible(0.2, session_id):
-                        break
+                    self.ui.device.sleep(0.2)
                     continue
                 break
 
@@ -234,8 +219,7 @@ class TaskFarmMain:
             if not out.action:
                 break
             actions.extend(out.actions)
-            if not self.engine._sleep_interruptible(0.2, session_id):
-                break
+            self.ui.device.sleep(0.2)
 
         return actions
 
@@ -245,17 +229,6 @@ class TaskFarmMain:
             return StepResult.from_value(self.task_friend.help_in_friend_farm(rect))
         return StepResult()
 
-    def _click_goto_main(self, rect: tuple[int, int, int, int]):
-        """点击回主按钮。"""
-        x, y = self.engine._resolve_goto_main_point(rect)
-        if self.engine.device:
-            self.engine.device.click_point(x, y, desc=GOTO_MAIN.name)
-
-    def _refresh_ui_image(self, rect: tuple[int, int, int, int]) -> bool:
-        """刷新一帧并更新 UI 缓存图像。"""
-        cv_img = self.ui.device.screenshot(rect=rect, save=False)
-        return cv_img is not None
-
     def _try_expand(self, rect: tuple[int, int, int, int]) -> str | None:
         """尝试执行一次扩建流程；失败后会进入短路状态避免反复触发。"""
         if self._expand_failed:
@@ -263,12 +236,10 @@ class TaskFarmMain:
 
         if not self.ui.appear_then_click(BTN_EXPAND, offset=(30, 30), interval=1, threshold=0.8, static=False):
             return None
-        self.engine._sleep_interruptible(0.5)
+        self.ui.device.sleep(0.5)
 
         for _ in range(5):
-            if self.engine._is_cancel_requested():
-                return None
-            if not self._refresh_ui_image(rect):
+            if self.ui.device.screenshot(rect=rect, save=False) is None:
                 return None
 
             action_name = None
@@ -280,9 +251,9 @@ class TaskFarmMain:
                 action_name = '扩建确认'
 
             if action_name:
-                self.engine._sleep_interruptible(0.5)
+                self.ui.device.sleep(0.5)
                 self._expand_failed = False
-                if self._refresh_ui_image(rect):
+                if self.ui.device.screenshot(rect=rect, save=False) is not None:
                     self.ui.appear_then_click_any(
                         [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM],
                         offset=(30, 30),
@@ -299,9 +270,9 @@ class TaskFarmMain:
                 threshold=0.8,
                 static=False,
             ):
-                self.engine._sleep_interruptible(0.2)
+                self.ui.device.sleep(0.2)
                 continue
-            self.engine._sleep_interruptible(0.3)
+            self.ui.device.sleep(0.3)
 
         self._expand_failed = True
         logger.info('扩建条件不满足，暂停扩建检测')

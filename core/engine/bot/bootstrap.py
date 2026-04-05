@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import threading
-
 from core.base.button import Button
 from core.engine.task.executor import TaskExecutor
 from core.engine.task.registry import (
@@ -27,8 +25,6 @@ class BotInitMixin:
         """初始化对象并准备运行所需状态。"""
         super().__init__()
         self.config = config
-        self._session_id = 0
-        self._cancel_event = threading.Event()
         self._runtime_failure_count = 0
 
         # [1] 窗口控制层

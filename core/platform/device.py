@@ -100,8 +100,6 @@ class Device:
         """点击逻辑坐标点（会映射到当前截图坐标系）。"""
         if not self.engine.action_executor:
             return False
-        if self.engine._is_cancel_requested():
-            return False
         self._handle_control_check(desc)
 
         rel_x, rel_y = self.engine.resolve_live_click_point(int(x), int(y))
@@ -123,8 +121,6 @@ class Device:
 
     def drag_down_point(self, x: int, y: int, duration: float = 0.05) -> bool:
         """移动到目标点后按下鼠标，用于拖拽起手。"""
-        if self.engine._is_cancel_requested():
-            return False
         pos = self._relative_to_absolute(int(x), int(y))
         if pos is None:
             return False
@@ -135,8 +131,6 @@ class Device:
 
     def drag_move_point(self, x: int, y: int, duration: float = 0.1) -> bool:
         """拖拽中移动到目标点。"""
-        if self.engine._is_cancel_requested():
-            return False
         pos = self._relative_to_absolute(int(x), int(y))
         if pos is None:
             return False
@@ -158,7 +152,8 @@ class Device:
 
     def sleep(self, seconds: float):
         """执行 `sleep` 相关处理。"""
-        return self.engine._sleep_interruptible(float(seconds))
+        time.sleep(float(seconds))
+        return True
 
     def _handle_control_check(self, marker: str | None):
         """点击命中时重置卡死计时，并检查点击风暴。"""
@@ -193,8 +188,6 @@ class Device:
 
     def stuck_record_check(self):
         """检查是否长时间无有效点击。"""
-        if self.engine._is_cancel_requested():
-            return False
         elapsed = time.perf_counter() - self._stuck_started_at
         if elapsed < 360.0:
             return False
@@ -227,7 +220,12 @@ class Device:
 
     def app_is_running(self) -> bool:
         """执行 `app is running` 相关处理。"""
-        return not self.engine._is_cancel_requested()
+        try:
+            if not self.engine or not self.engine.window_manager:
+                return True
+            return bool(self.engine.window_manager.is_window_visible())
+        except Exception:
+            return True
 
     def get_orientation(self):
         """获取 `orientation` 信息。"""

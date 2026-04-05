@@ -16,11 +16,9 @@ class TaskFriend:
         self.ui = ui
         self._friend = TaskFarmFriend(engine=engine, ui=ui)
 
-    def run(self, session_id: int | None = None) -> TaskResult:
+    def run(self) -> TaskResult:
         """执行好友任务并返回调度结果。"""
         next_seconds = max(1, int(self.engine._task_seconds_by_trigger('friend')))
-        if self.engine._is_cancel_requested(session_id):
-            return TaskResult(success=False, actions=[], next_run_seconds=next_seconds, error='停止中')
         if not self.ui:
             return TaskResult(success=False, actions=[], next_run_seconds=next_seconds, error='UI未初始化')
 
@@ -30,7 +28,7 @@ class TaskFriend:
         if self.engine.device:
             self.engine.device.set_rect(rect)
 
-        self.engine._clear_screen(rect, session_id)
+        self.engine._clear_screen(rect)
         self.ui.ui_ensure(page_main, confirm_wait=0.5)
 
         out = self._friend.run(rect=rect, features=self.engine.get_task_features('friend'))

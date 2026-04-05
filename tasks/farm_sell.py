@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from loguru import logger
 
-from core.base.timer import Timer
 from core.base.step_result import StepResult
+from core.base.timer import Timer
 from core.ui.assets import (
     BTN_BATCH_SELL,
     BTN_CLOSE,
@@ -45,8 +45,6 @@ class TaskFarmSell:
         confirm_timer = Timer(2.0, count=2).start()
         click_timer = Timer(0.3)
         while 1:
-            if self.engine._is_cancel_requested():
-                return False
             if skip_first_screenshot:
                 skip_first_screenshot = False
             else:
@@ -84,8 +82,6 @@ class TaskFarmSell:
         click_timer = Timer(0.3)
         batch_clicked = False
         while 1:
-            if self.engine._is_cancel_requested():
-                return False
             if skip_first_screenshot:
                 skip_first_screenshot = False
             else:
@@ -103,7 +99,7 @@ class TaskFarmSell:
                 BTN_CONFIRM, offset=(30, 30), interval=1, threshold=0.8, static=False
             ):
                 self.engine._record_stat(ActionType.SELL)
-                self.engine._sleep_interruptible(0.2)
+                self.ui.device.sleep(0.2)
                 return True
 
             if click_timer.reached() and self.ui.appear_then_click(
@@ -128,8 +124,6 @@ class TaskFarmSell:
         confirm_timer = Timer(2.0, count=2).start()
         click_timer = Timer(0.3)
         while 1:
-            if self.engine._is_cancel_requested():
-                return
             if skip_first_screenshot:
                 skip_first_screenshot = False
             else:
@@ -152,5 +146,3 @@ class TaskFarmSell:
 
             if confirm_timer.reached():
                 return
-
-

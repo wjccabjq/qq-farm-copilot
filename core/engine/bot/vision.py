@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import cv2
 import numpy as np
 from PIL import Image as PILImage
@@ -19,8 +21,7 @@ class BotVisionMixin:
         if not window:
             return None
         self.window_manager.activate_window()
-        if not self._sleep_interruptible(0.3):
-            return None
+        time.sleep(0.3)
         rect = self.window_manager.get_capture_rect()
         if not rect:
             rect = (window.left, window.top, window.width, window.height)
@@ -29,32 +30,6 @@ class BotVisionMixin:
         if self.device:
             self.device.set_rect(rect)
         return rect
-
-    def _capture_frame(
-        self, rect: tuple, prefix: str = 'farm', save: bool = True
-    ) -> tuple[np.ndarray | None, PILImage.Image | None]:
-        """兼容入口：截图逻辑已下沉到 `device.screenshot`。"""
-        if not self.device:
-            return None, None
-        cv_image = self.device.screenshot(rect=rect, prefix=prefix, save=save)
-        preview_image = getattr(self.device, 'preview_image', None)
-        return cv_image, preview_image
-
-    def _capture_and_detect(
-        self,
-        rect: tuple,
-        prefix: str = 'farm',
-        template_names: list[str] | None = None,
-        template_thresholds: dict[str, float] | None = None,
-        template_rois: dict[str, tuple[int, int, int, int]] | None = None,
-        save: bool = True,
-    ) -> tuple[np.ndarray | None, list[DetectResult], PILImage.Image | None]:
-        """兼容入口：截图逻辑已下沉到 `device.screenshot`。"""
-        _ = (template_names, template_thresholds, template_rois)
-        cv_image, image = self._capture_frame(rect, prefix=prefix, save=save)
-        if cv_image is None or image is None:
-            return None, [], None
-        return cv_image, [], image
 
     def _emit_annotated(self, cv_image: np.ndarray, detections: list[DetectResult]):
         """将识别结果绘制为标注图并推送到界面。"""
