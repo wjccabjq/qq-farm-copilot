@@ -32,6 +32,8 @@ FRIEND_DETAIL_ICON_X_RANGE = (70, 540)
 FRIEND_DETAIL_ICON_Y_RANGE = (815, 855)
 FRIEND_PAGE_ICON_X_RANGE = (105, 410)
 FRIEND_PAGE_ICON_Y_RANGE = (260, 800)
+FRIEND_DETAIL_SWIPE_START = (405, 860)
+FRIEND_DETAIL_SWIPE_END = (150, 860)
 
 
 class TaskFriend(TaskBase):
@@ -144,6 +146,11 @@ class TaskFriend(TaskBase):
         self.ui.device.screenshot()
 
         candidates = self._collect_operable_friend_icons(enable_help=enable_help, enable_steal=enable_steal)
+        if not candidates:
+            self.ui.device.swipe(FRIEND_DETAIL_SWIPE_START, FRIEND_DETAIL_SWIPE_END, speed=20, delay=0.5)
+            self.ui.device.screenshot()
+            candidates = self._collect_operable_friend_icons(enable_help=enable_help, enable_steal=enable_steal)
+
         if candidates:
             if self.ui.device.click_button(candidates[0]):
                 logger.info('好友流程: 切换下一位好友')

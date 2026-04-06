@@ -319,3 +319,93 @@ class ActionExecutor:
                 logger.warning(f'✗ {action.description}: {result.message}')
 
         return results
+
+    def swipe_absolute(
+        self,
+        p1: tuple[int, int],
+        p2: tuple[int, int],
+        *,
+        speed: float = 15.0,
+        inertia: bool = False,
+        rel_p1: tuple[int, int] | None = None,
+        rel_p2: tuple[int, int] | None = None,
+    ) -> bool:
+        """执行鼠标滑动（兼容前台/后台模式）。"""
+        try:
+            x1, y1 = int(p1[0]), int(p1[1])
+            x2, y2 = int(p2[0]), int(p2[1])
+        except Exception:
+            logger.error('滑动失败: 坐标格式非法')
+            return False
+
+        if not self._in_window(x1, y1) or not self._in_window(x2, y2):
+            logger.warning(f'滑动越界: ({x1}, {y1}) -> ({x2}, {y2})')
+            return False
+
+        distance = max(abs(x2 - x1), abs(y2 - y1))
+        if distance <= 0:
+            return True
+
+        speed_value = max(1.0, float(speed))
+        if inertia:
+            total_duration = max(0.05, min(0.45, distance / (speed_value * 220.0)))
+            steps = max(4, min(18, distance // 20))
+        else:
+            # 无惯性模式：增加轨迹采样并降低末段速度，减少抬手瞬间速度。
+            total_duration = max(0.15, min(0.95, distance / (speed_value * 140.0)))
+            steps = max(8, min(36, distance // 12))
+
+        if not self.move_abs(x1, y1, duration=0.01):
+            return False
+        if not self.mouse_down():
+            return False
+
+        ok = True
+        try:
+            # 分段时长：越到后段越慢（ease-out），用于主动去惯性。
+            duration_weights: list[float] = []
+            for i in range(1, int(steps) + 1):
+                t = i / float(steps)
+                duration_weights.append(0.7 + 1.6 * t if not inertia else 1.0)
+            total_weight = sum(duration_weights) if duration_weights else 1.0
+
+            for i in range(1, int(steps) + 1):
+                t = i / float(steps)
+                if inertia:
+                    ratio = t
+                else:
+                    ratio = 1.0 - pow(1.0 - t, 2.2)
+                tx = int(round(x1 + (x2 - x1) * ratio))
+                ty = int(round(y1 + (y2 - y1) * ratio))
+                step_duration = total_duration * duration_weights[i - 1] / total_weight
+                if not self.move_abs(tx, ty, duration=step_duration):
+                    ok = False
+                    break
+            if ok and not inertia:
+                # 末端回拉-回位：主动抵消拖拽末速度（比单纯延时更有效）。
+                sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
+                sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
+                pull = max(2, min(10, int(distance * 0.03)))
+                back_x = x2 - sign_x * pull
+                back_y = y2 - sign_y * pull
+                if self._in_window(back_x, back_y):
+                    self.move_abs(back_x, back_y, duration=0.03)
+                    self.move_abs(x2, y2, duration=0.04)
+                time.sleep(0.03)
+        finally:
+            self.mouse_up()
+
+        if rel_p1 is None:
+            log_p1 = (x1, y1)
+        else:
+            log_p1 = (int(rel_p1[0]), int(rel_p1[1]))
+        if rel_p2 is None:
+            log_p2 = (x2, y2)
+        else:
+            log_p2 = (int(rel_p2[0]), int(rel_p2[1]))
+
+        if ok:
+            logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        else:
+            logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        return ok

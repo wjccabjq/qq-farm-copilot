@@ -205,6 +205,40 @@ class Device:
             return False
         return self.engine.action_executor.mouse_up()
 
+    def swipe(
+        self,
+        p1: tuple[int, int],
+        p2: tuple[int, int],
+        *,
+        speed: float = 15,
+        inertia: bool = False,
+        delay: float = 0.0,
+    ) -> bool:
+        """执行鼠标滑动。"""
+        if not self.engine.action_executor:
+            return False
+
+        rel1 = self.engine.resolve_live_click_point(int(p1[0]), int(p1[1]))
+        rel2 = self.engine.resolve_live_click_point(int(p2[0]), int(p2[1]))
+        abs1 = self.engine.action_executor.relative_to_absolute(int(rel1[0]), int(rel1[1]))
+        abs2 = self.engine.action_executor.relative_to_absolute(int(rel2[0]), int(rel2[1]))
+        if abs1 is None or abs2 is None:
+            return False
+
+        ok = bool(
+            self.engine.action_executor.swipe_absolute(
+                abs1,
+                abs2,
+                speed=float(speed),
+                inertia=bool(inertia),
+                rel_p1=(int(rel1[0]), int(rel1[1])),
+                rel_p2=(int(rel2[0]), int(rel2[1])),
+            )
+        )
+        if ok and float(delay) > 0:
+            self.sleep(float(delay))
+        return ok
+
     def long_click_point(self, x: int, y: int, seconds: float):
         """长按逻辑坐标点。"""
         ok = self.click_point(int(x), int(y), desc=f'long_click({seconds:.1f}s)')
