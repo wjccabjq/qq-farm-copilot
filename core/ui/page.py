@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import traceback
-
 from core.base.button import Button
 from core.ui.assets import *
 
@@ -22,30 +20,24 @@ class Page:
 
     parent = None
 
-    def __init__(self, check_button, cn_name: str = ''):
+    def __init__(self, name: str, check_button, cn_name: str = ''):
         """初始化对象并准备运行所需状态。"""
+        self.name = str(name).strip()
+        if not self.name:
+            raise ValueError('Page.name 不能为空')
         self.check_button = check_button
         self.links = {}
-        (_filename, _line, _function, text) = traceback.extract_stack()[-2]
-        line = str(text or '')
-        eq_pos = line.find('=')
-        parsed_name = line[:eq_pos].strip() if eq_pos > 0 else ''
-        self.name = parsed_name or f'page_{id(self)}'
         self.cn_name = cn_name or self.name
 
     def __eq__(self, other):
         """定义对象相等比较逻辑。"""
         if not isinstance(other, Page):
             return False
-        if self.name and other.name and not self.name.startswith('page_') and not other.name.startswith('page_'):
-            return self.name == other.name
-        return self is other
+        return self.name == other.name
 
     def __hash__(self):
         """定义对象哈希值，支持集合与字典键。"""
-        if self.name and not self.name.startswith('page_'):
-            return hash(self.name)
-        return id(self)
+        return hash(self.name)
 
     def __str__(self):
         """返回对象的可读字符串表示。"""
@@ -56,20 +48,20 @@ class Page:
         self.links[destination] = button
 
 
-page_main = Page((MAIN_GOTO_TASK, MAIN_GOTO_MENU), cn_name='主页')
+page_main = Page('page_main', (MAIN_GOTO_TASK, MAIN_GOTO_MENU), cn_name='主页')
 
 # Unknown
-page_unknown = Page(None, cn_name='未知页面')
+page_unknown = Page('page_unknown', None, cn_name='未知页面')
 page_unknown.link(button=GOTO_MAIN, destination=page_main)
 
-page_menu = Page(SETTING_CHECK, cn_name='菜单')
-page_shop = Page(SHOP_CHECK, cn_name='商店')
-page_friend = Page(FRIEND_CHECK, cn_name='好友')
-page_mall = Page(MALL_CHECK, cn_name='商城')
-page_pet = Page(PET_CHECK, cn_name='宠物')
-page_task = Page(TASK_CHECK, cn_name='任务')
-page_warehouse = Page(WAREHOUSE_CHECK, cn_name='仓库')
-page_wiki = Page(WIKI_CHECK, cn_name='图鉴')
+page_menu = Page('page_menu', SETTING_CHECK, cn_name='菜单')
+page_shop = Page('page_shop', SHOP_CHECK, cn_name='商店')
+page_friend = Page('page_friend', FRIEND_CHECK, cn_name='好友')
+page_mall = Page('page_mall', MALL_CHECK, cn_name='商城')
+page_pet = Page('page_pet', PET_CHECK, cn_name='宠物')
+page_task = Page('page_task', TASK_CHECK, cn_name='任务')
+page_warehouse = Page('page_warehouse', WAREHOUSE_CHECK, cn_name='仓库')
+page_wiki = Page('page_wiki', WIKI_CHECK, cn_name='图鉴')
 
 page_main.link(button=MAIN_GOTO_FRIEND, destination=page_friend)
 page_friend.link(button=BTN_CLOSE, destination=page_main)
