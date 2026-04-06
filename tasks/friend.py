@@ -28,6 +28,7 @@ from core.ui.page import page_friend
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 
+FRIEND_DETAIL_ICON_X_RANGE = (70, 540)
 FRIEND_DETAIL_ICON_Y_RANGE = (815, 855)
 FRIEND_PAGE_ICON_X_RANGE = (105, 410)
 FRIEND_PAGE_ICON_Y_RANGE = (260, 800)
@@ -145,7 +146,9 @@ class TaskFriend(TaskBase):
 
         if not icons:
             return []
-        icons = self.ui.filter_buttons_in_area(icons, y_range=FRIEND_DETAIL_ICON_Y_RANGE)
+        icons = self.ui.filter_buttons_in_area(
+            icons, x_range=FRIEND_DETAIL_ICON_X_RANGE, y_range=FRIEND_DETAIL_ICON_Y_RANGE
+        )
         icons = self.ui.sort_buttons_by_location(icons, horizontal=True)
         return icons
 
@@ -164,9 +167,7 @@ class TaskFriend(TaskBase):
         if not icons:
             return []
         icons = self.ui.filter_buttons_in_area(
-            icons,
-            x_range=FRIEND_PAGE_ICON_X_RANGE,
-            y_range=FRIEND_PAGE_ICON_Y_RANGE,
+            icons, x_range=FRIEND_PAGE_ICON_X_RANGE, y_range=FRIEND_PAGE_ICON_Y_RANGE
         )
         # 好友列表页按纵向优先（y -> x）排序，优先从上往下处理。
         icons = self.ui.sort_buttons_by_location(icons, horizontal=False)
