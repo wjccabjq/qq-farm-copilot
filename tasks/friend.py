@@ -58,6 +58,7 @@ class TaskFriend(TaskBase):
         self.wait_list_loading()
 
         actions = self._run_friend_progressive(enable_help=enable_help, enable_steal=enable_steal)
+        actions = self._compact_actions(actions)
         # 返回主页
         self.back_to_home()
         logger.info('好友流程: 结束 | 动作={}', '、'.join(actions) if actions else '无动作')
@@ -72,6 +73,24 @@ class TaskFriend(TaskBase):
 
         self._run_friend_recursive(enable_help=enable_help, enable_steal=enable_steal, actions=actions)
         return actions
+
+    @staticmethod
+    def _compact_actions(actions: list[str]) -> list[str]:
+        """压缩好友任务动作，避免日志中出现过长明细。"""
+        if not actions:
+            return []
+
+        steal_count = sum(1 for item in actions if '偷好友果实' in item)
+        help_count = sum(1 for item in actions if item.startswith('好友帮忙'))
+
+        compact: list[str] = []
+        if steal_count > 0:
+            compact.append(f'好友偷菜×{steal_count}')
+        if help_count > 0:
+            compact.append(f'好友帮忙×{help_count}')
+        if not compact:
+            compact.append('好友互动')
+        return compact
 
     def _run_friend_recursive(self, *, enable_help: bool, enable_steal: bool, actions: list[str]):
         """递归处理当前好友并切换到下一位可操作好友。"""
