@@ -28,7 +28,7 @@ class StatusPanel(QWidget):
 
         # 运行状态组
         status_group = QGroupBox(str(self._group_titles.get('runtime', 'Runtime')))
-        status_group.setStyleSheet("QGroupBox { font-weight: bold; color: #475569; }")
+        status_group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
         status_layout = QGridLayout()
         status_layout.setContentsMargins(0, 0, 0, 4)
         status_layout.setHorizontalSpacing(16)
@@ -42,7 +42,7 @@ class StatusPanel(QWidget):
 
         # 任务信息组
         task_group = QGroupBox(str(self._group_titles.get('task', 'Task')))
-        task_group.setStyleSheet("QGroupBox { font-weight: bold; color: #475569; }")
+        task_group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
         task_layout = QGridLayout()
         task_layout.setContentsMargins(0, 0, 0, 4)
         task_layout.setHorizontalSpacing(16)
@@ -53,13 +53,12 @@ class StatusPanel(QWidget):
         self._add_cell(task_layout, 0, 3, self._cell_labels.get('waiting_tasks', 'Waiting'), 'waiting_tasks', '0')
         self._add_cell(task_layout, 1, 0, self._cell_labels.get('failure_count', 'Failures'), 'failure_count', '0')
         self._add_cell(task_layout, 1, 1, self._cell_labels.get('last_tick_ms', 'Last tick'), 'last_tick_ms', '--')
-        self._add_cell(task_layout, 1, 2, self._cell_labels.get('last_result', 'Last result'), 'last_result', '--')
         task_group.setLayout(task_layout)
         outer.addWidget(task_group)
 
         # 统计信息组
         stats_group = QGroupBox(str(self._group_titles.get('stats', 'Stats')))
-        stats_group.setStyleSheet("QGroupBox { font-weight: bold; color: #475569; }")
+        stats_group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
         stats_layout = QGridLayout()
         stats_layout.setContentsMargins(0, 0, 0, 4)
         stats_layout.setHorizontalSpacing(16)
@@ -118,6 +117,5 @@ class StatusPanel(QWidget):
         self._labels['pending_tasks'].setText(str(stats.get('pending_tasks', 0)))
         self._labels['waiting_tasks'].setText(str(stats.get('waiting_tasks', 0)))
         self._labels['last_tick_ms'].setText(str(stats.get('last_tick_ms', '--')))
-        self._labels['last_result'].setText(str(stats.get('last_result', '--')))
         for key in ('harvest', 'plant', 'water', 'weed', 'bug', 'sell'):
             self._labels[key].setText(str(stats.get(key, 0)))

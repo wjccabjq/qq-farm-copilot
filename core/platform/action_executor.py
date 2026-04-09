@@ -1,6 +1,7 @@
 """操作执行器 - 支持后台消息点击与前台回退。"""
 
 import ctypes
+import math
 import random
 import time
 from ctypes import wintypes
@@ -10,7 +11,8 @@ from loguru import logger
 
 from models.config import RunMode
 from models.farm_state import Action, OperationResult
-from utils.run_mode_decorator import Config as DecoratorConfig, UNSET
+from utils.run_mode_decorator import UNSET
+from utils.run_mode_decorator import Config as DecoratorConfig
 
 # Windows 消息常量
 WM_MOUSEMOVE = 0x0200
@@ -98,6 +100,10 @@ class ActionExecutor:
         dmax = max(float(self._delay_min), float(self._delay_max))
         time.sleep(random.uniform(dmin, dmax))
 
+    def _debug(self, message: str):
+        """输出调试日志。"""
+        logger.debug(message)
+
     @staticmethod
     def _format_action_name(desc: str) -> str:
         """格式化日志中的动作名称。"""
@@ -123,7 +129,10 @@ class ActionExecutor:
 
     def _in_window(self, abs_x: int, abs_y: int) -> bool:
         """判断绝对坐标是否在当前窗口矩形范围内。"""
-        return self._window_left <= abs_x <= self._window_left + self._window_width and self._window_top <= abs_y <= self._window_top + self._window_height
+        return (
+            self._window_left <= abs_x <= self._window_left + self._window_width
+            and self._window_top <= abs_y <= self._window_top + self._window_height
+        )
 
     def _click_background(self, abs_x: int, abs_y: int) -> bool:
         """后台消息点击。"""
@@ -334,11 +343,11 @@ class ActionExecutor:
         p2: tuple[int, int],
         *,
         speed: float = 15.0,
-        inertia: bool = False,
+        hold: float = 0.0,
         rel_p1: tuple[int, int] | None = None,
         rel_p2: tuple[int, int] | None = None,
     ) -> bool:
-        """执行鼠标滑动（兼容前台/后台模式）。"""
+        """执行鼠标滑动"""
         try:
             x1, y1 = int(p1[0]), int(p1[1])
             x2, y2 = int(p2[0]), int(p2[1])
@@ -350,58 +359,151 @@ class ActionExecutor:
             logger.warning(f'滑动越界: ({x1}, {y1}) -> ({x2}, {y2})')
             return False
 
-        distance = max(abs(x2 - x1), abs(y2 - y1))
+        distance = math.hypot(x2 - x1, y2 - y1)
         if distance <= 0:
             return True
 
-        speed_value = max(1.0, float(speed))
-        if inertia:
-            total_duration = max(0.05, min(0.45, distance / (speed_value * 220.0)))
-            steps = max(4, min(18, distance // 20))
-        else:
-            # 无惯性模式：增加轨迹采样并降低末段速度，减少抬手瞬间速度。
-            total_duration = max(0.15, min(0.95, distance / (speed_value * 140.0)))
-            steps = max(8, min(36, distance // 12))
+        speed_value = max(0.1, float(speed))
+        hold_value = max(0.0, float(hold))
+        if self._run_mode == RunMode.FOREGROUND:
+            ok = self._swipe_foreground_nikke_style(
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
+                speed=speed_value,
+                hold=hold_value,
+            )
+            log_p1 = (int(rel_p1[0]), int(rel_p1[1])) if rel_p1 is not None else (x1, y1)
+            log_p2 = (int(rel_p2[0]), int(rel_p2[1])) if rel_p2 is not None else (x2, y2)
+            if ok:
+                logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+            else:
+                logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+            self._debug(f'滑动调试: result={ok}')
+            return ok
 
-        if not self.move_abs(x1, y1, duration=0.01):
+        # 统一滑动速度参数：不按运行模式区分。
+        duration_scale = 33.0
+        total_duration = distance / speed_value / 1000.0 * duration_scale
+        max_duration = 0.56
+        min_duration = 0.08
+        if total_duration > max_duration:
+            total_duration = max_duration
+        if total_duration < min_duration:
+            total_duration = min_duration
+        # 分两段滑动：前段正常推进，末段减速；严格受 total_duration 预算约束。
+        tail_ratio = 0.35
+        total_steps = max(14, min(60, int(distance / 12)))
+        tail_steps = max(8, int(total_steps * tail_ratio))
+        head_steps = max(8, total_steps - tail_steps)
+        tail_weight = 2.0
+        weighted_steps = float(head_steps) + float(tail_steps) * tail_weight
+        head_step_duration = total_duration / weighted_steps
+        tail_step_duration = head_step_duration * tail_weight
+        planned_duration = head_steps * head_step_duration + tail_steps * tail_step_duration
+
+        start_rel = rel_p1 if rel_p1 is not None else (x1, y1)
+        end_rel = rel_p2 if rel_p2 is not None else (x2, y2)
+        self._debug(
+            '滑动调试: start_rel=({},{}) end_rel=({},{}) start_abs=({},{}) end_abs=({},{}) '
+            'distance={:.2f} speed={:.2f} hold={:.3f} duration={:.3f} planned={:.3f} total_steps={} '
+            'head_steps={} tail_steps={} head_dt={:.4f} tail_dt={:.4f} run_mode={}'.format(
+                int(start_rel[0]),
+                int(start_rel[1]),
+                int(end_rel[0]),
+                int(end_rel[1]),
+                x1,
+                y1,
+                x2,
+                y2,
+                distance,
+                speed_value,
+                hold_value,
+                total_duration,
+                planned_duration,
+                total_steps,
+                head_steps,
+                tail_steps,
+                head_step_duration,
+                tail_step_duration,
+                self._run_mode.value if hasattr(self._run_mode, 'value') else str(self._run_mode),
+            )
+        )
+
+        if not self.move_abs(x1, y1, duration=0.0):
+            self._debug('滑动调试: move_to_start failed')
             return False
+        time.sleep(0.03)
         if not self.mouse_down():
+            self._debug('滑动调试: mouse_down failed')
             return False
 
         ok = True
         try:
-            # 分段时长：越到后段越慢（ease-out），用于主动去惯性。
-            duration_weights: list[float] = []
-            for i in range(1, int(steps) + 1):
-                t = i / float(steps)
-                duration_weights.append(0.7 + 1.6 * t if not inertia else 1.0)
-            total_weight = sum(duration_weights) if duration_weights else 1.0
-
-            for i in range(1, int(steps) + 1):
-                t = i / float(steps)
-                if inertia:
-                    ratio = t
-                else:
-                    ratio = 1.0 - pow(1.0 - t, 2.2)
+            self._debug('滑动调试: path=interpolated decel')
+            head_ratio = 1.0 - tail_ratio
+            for i in range(1, head_steps + 1):
+                ratio = head_ratio * (i / float(head_steps))
                 tx = int(round(x1 + (x2 - x1) * ratio))
                 ty = int(round(y1 + (y2 - y1) * ratio))
-                step_duration = total_duration * duration_weights[i - 1] / total_weight
-                if not self.move_abs(tx, ty, duration=step_duration):
+                if not self.move_abs(tx, ty, duration=head_step_duration):
                     ok = False
                     break
-            if ok and not inertia:
-                # 末端回拉-回位：主动抵消拖拽末速度（比单纯延时更有效）。
+
+            if ok:
+                for i in range(1, tail_steps + 1):
+                    ratio = head_ratio + tail_ratio * (i / float(tail_steps))
+                    tx = int(round(x1 + (x2 - x1) * ratio))
+                    ty = int(round(y1 + (y2 - y1) * ratio))
+                    if not self.move_abs(tx, ty, duration=tail_step_duration):
+                        ok = False
+                        break
+
+            if ok and distance >= 120:
+                # 抬手前微回拉刹车，降低释放瞬间速度。
                 sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
                 sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
-                pull = max(2, min(10, int(distance * 0.03)))
-                back_x = x2 - sign_x * pull
-                back_y = y2 - sign_y * pull
+                brake_px = max(1, min(3, int(distance * 0.0045)))
+                back_x = x2 - sign_x * brake_px
+                back_y = y2 - sign_y * brake_px
                 if self._in_window(back_x, back_y):
-                    self.move_abs(back_x, back_y, duration=0.03)
-                    self.move_abs(x2, y2, duration=0.04)
-                time.sleep(0.03)
+                    self._debug(f'滑动调试: brake back=({back_x},{back_y}) -> end=({x2},{y2}) brake_px={brake_px}')
+                    self.move_abs(back_x, back_y, duration=0.012)
+                    self.move_abs(x2, y2, duration=0.016)
+
+            if ok:
+                # hold 阶段不只 sleep：终点附近 1~2px 微抖动，避免同坐标 move 被合并。
+                if hold_value > 0:
+                    stop_frames = max(1, min(80, int(hold_value / 0.016)))
+                    stop_dt = hold_value / float(stop_frames)
+                else:
+                    stop_frames = 6
+                    stop_dt = 0.012
+                axis_x = abs(x2 - x1) >= abs(y2 - y1)
+                settle_sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
+                settle_sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
+                settle_amp = 2 if distance >= 420 else 1
+                self._debug(
+                    f'滑动调试: stop_frames={stop_frames} stop_dt={stop_dt:.4f} '
+                    f'axis={"x" if axis_x else "y"} settle_amp={settle_amp}'
+                )
+                for _ in range(stop_frames):
+                    if axis_x:
+                        settle_x = x2 - settle_sign_x * settle_amp
+                        settle_y = y2
+                    else:
+                        settle_x = x2
+                        settle_y = y2 - settle_sign_y * settle_amp
+                    if not self.move_abs(settle_x, settle_y, duration=stop_dt * 0.5):
+                        ok = False
+                        break
+                    if not self.move_abs(x2, y2, duration=stop_dt * 0.5):
+                        ok = False
+                        break
         finally:
             self.mouse_up()
+            self._debug('滑动调试: mouse_up done')
 
         if rel_p1 is None:
             log_p1 = (x1, y1)
@@ -416,4 +518,50 @@ class ActionExecutor:
             logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
         else:
             logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        self._debug(f'滑动调试: result={ok}')
         return ok
+
+    def _swipe_foreground_nikke_style(
+        self,
+        *,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        speed: float,
+        hold: float,
+    ) -> bool:
+        """前台滑动：对齐 NIKKE win input.mouse_swipe 的分段线性拖拽。"""
+        try:
+            distance = math.hypot(x2 - x1, y2 - y1)
+            segments = max(1, int(distance / 20))
+            total_time = max(0.05, min(distance / (100 * max(0.1, float(speed))), 0.15))
+            step_delay = total_time / float(segments)
+            self._debug(
+                '滑动调试: path=foreground_nikke_swipe distance={:.2f} speed={:.2f} '
+                'segments={} total_time={:.4f} step_delay={:.4f} hold={:.3f}'.format(
+                    distance, speed, segments, total_time, step_delay, hold
+                )
+            )
+
+            prev_pause = pyautogui.PAUSE
+            pyautogui.PAUSE = 0.0
+            try:
+                pyautogui.moveTo(x1, y1, duration=0.0)
+                time.sleep(0.01)
+                pyautogui.mouseDown()
+                for i in range(1, segments + 1):
+                    t = i / float(segments)
+                    tx = x1 + (x2 - x1) * t
+                    ty = y1 + (y2 - y1) * t
+                    pyautogui.moveTo(tx, ty, duration=0.0)
+                    time.sleep(step_delay)
+                if hold > 0:
+                    time.sleep(hold)
+                pyautogui.mouseUp()
+            finally:
+                pyautogui.PAUSE = prev_pause
+            return True
+        except Exception as e:
+            logger.error(f'前台滑动失败: {e}')
+            return False

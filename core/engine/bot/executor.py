@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import threading
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -24,7 +23,8 @@ from tasks.friend import TaskFriend
 from tasks.main import TaskMain
 from tasks.sell import TaskSell
 from tasks.share import TaskShare
-from utils.app_paths import ensure_user_configs, resolve_config_file
+from utils.feature_policy import get_forced_off_features
+from utils.ui_labels import load_ui_labels
 
 
 class BotExecutorMixin:
@@ -34,16 +34,7 @@ class BotExecutorMixin:
     @lru_cache(maxsize=1)
     def _task_title_map() -> dict[str, str]:
         """读取任务中文标题映射。"""
-        ensure_user_configs()
-        labels_path = resolve_config_file('ui_labels.json', prefer_user=True)
-        if not labels_path.exists():
-            return {}
-        try:
-            data = json.loads(labels_path.read_text(encoding='utf-8'))
-        except Exception:
-            return {}
-        if not isinstance(data, dict):
-            return {}
+        data = load_ui_labels()
         panel = data.get('task_panel', {})
         if not isinstance(panel, dict):
             return {}
@@ -166,11 +157,11 @@ class BotExecutorMixin:
     def _prepare_task_scene(self, task_name: str) -> tuple[tuple[int, int, int, int] | None, TaskResult | None]:
         """统一准备任务执行场景：窗口与截图区域。"""
         if self.ui is None:
-            return None, TaskResult(success=False, actions=[], error='UI未初始化')
+            return None, TaskResult(success=False, error='UI未初始化')
 
         rect = self._prepare_window()
         if not rect:
-            return None, TaskResult(success=False, actions=[], error='窗口未找到')
+            return None, TaskResult(success=False, error='窗口未找到')
         if self.device:
             self.device.set_rect(rect)
         return rect, None
@@ -230,7 +221,10 @@ class BotExecutorMixin:
         raw = getattr(cfg, 'features', {}) or {}
         if not isinstance(raw, dict):
             return {}
-        return {str(k): bool(v) for k, v in raw.items()}
+        features = {str(k): bool(v) for k, v in raw.items()}
+        for key in get_forced_off_features(str(task_name)):
+            features[key] = False
+        return features
 
     def _sync_executor_tasks_from_config(
         self,
@@ -320,7 +314,7 @@ class BotExecutorMixin:
         """执行 `task_main` 子流程。"""
         rect, err = self._prepare_task_scene('main')
         if err is not None or rect is None:
-            return err or TaskResult(success=False, actions=[], error='窗口未找到')
+            return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskMain(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -329,7 +323,7 @@ class BotExecutorMixin:
         """执行 `task_friend` 子流程。"""
         rect, err = self._prepare_task_scene('friend')
         if err is not None or rect is None:
-            return err or TaskResult(success=False, actions=[], error='窗口未找到')
+            return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskFriend(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -338,7 +332,7 @@ class BotExecutorMixin:
         """执行 `task_share` 子流程。"""
         rect, err = self._prepare_task_scene('share')
         if err is not None or rect is None:
-            return err or TaskResult(success=False, actions=[], error='窗口未找到')
+            return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskShare(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -347,7 +341,7 @@ class BotExecutorMixin:
         """执行 `task_sell` 子流程。"""
         rect, err = self._prepare_task_scene('sell')
         if err is not None or rect is None:
-            return err or TaskResult(success=False, actions=[], error='窗口未找到')
+            return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskSell(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -401,19 +395,16 @@ class BotExecutorMixin:
             self._task_error_delay_overrides.pop(task_name, None)
             self._task_error_type_names.pop(task_name, None)
 
-        action_text = ', '.join(result.actions) if result.actions else '无动作'
         status_text = '成功' if result.success else '失败'
         next_run_text = self._format_task_next_run(self._executor_tasks.get(task_name))
         display_name = self._task_display_name(task_name)
-        msg = f'[{display_name}] 任务完成: {status_text} | 动作: {action_text} | 下次执行: {next_run_text}'
+        msg = f'[{display_name}] 任务完成: {status_text} | 下次执行: {next_run_text}'
         if not result.success and result.error:
             msg = f'{msg} | 错误: {result.error}'
         logger.info(msg)
 
-        last_result = result.actions[-1] if result.actions else ('ok' if result.success else 'failed')
         self.scheduler.update_runtime_metrics(
             failure_count=self._runtime_failure_count,
-            last_result=last_result,
         )
         self._emit_stats_now()
 

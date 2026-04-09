@@ -23,7 +23,8 @@ class UI(Handler):
         page_unknown,
         page_main,
         page_shop,
-        page_friend,
+        page_friend_list,
+        page_friend_farm,
         page_mall,
         page_pet,
         page_task,
@@ -44,7 +45,7 @@ class UI(Handler):
         self.ui_current: Page = page_unknown
 
     def ui_page_appear(self, page: Page):
-        """判断某个页面是否出现（支持单按钮或多按钮联合判定）。"""
+        """判断某个页面是否出现（支持单按钮或多按钮交集判定）。"""
         check = page.check_button
         if check is None:
             return False
@@ -170,7 +171,7 @@ class UI(Handler):
         if self.ui_current == destination:
             logger.info(f'已在页面: {destination.cn_name}')
             return False
-        if self.ui_current == page_main and destination == page_friend:
+        if self.ui_current == page_main and destination == page_friend_list:
             if self._ensure_main_to_friend():
                 return True
         logger.info(f'跳转到页面: {destination.cn_name}')
