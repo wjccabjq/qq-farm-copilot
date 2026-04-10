@@ -7,15 +7,21 @@
 ## 0. 当前状态
 
 - 项目名：`QQ Farm Copilot`
+- UI 结构：左侧截图预览 + 中间实例运行面板 + 最右侧竖向实例栏
+- 实例纳管操作：`新增 / 删除 / 切换 / 克隆 / 重命名`
 - 调度模式：`TaskExecutor` 单线程串行执行
-- 任务配置：`configs/config.json -> tasks`（动态字典）
+- 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
+- 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
 - 视觉按钮来源：`core/ui/assets.py`（由 `tools/button_extract.py` 生成）
 
 ## 1. 核心架构与职责
 
 - `core/engine/bot/engine.py`
 : `BotEngine` 入口，组合 `bootstrap/executor/runtime/vision`。
+
+- `core/instance/manager.py`
+: 实例会话管理（实例增删改查、当前实例切换、元数据保存）。
 
 - `core/engine/bot/runtime.py`
 : 生命周期与会话控制（start/stop/pause/resume/run_once）、配置更新、可中断睡眠、坐标映射。
@@ -55,6 +61,12 @@
 
 - `TaskResult.success=false` 时计入失败并使用 `failure_interval_seconds`（除非 next_run_seconds 覆盖）。
 - 不要新增会影响调度推进的“业务阻断标记”。
+
+### 2.5 多实例边界（必须遵守）
+
+- 启动/暂停/停止/立即执行逻辑保持在中间实例面板，禁止新增“全局实例总控启停”。
+- 实例纳管仅包含：`新增 / 删除 / 切换 / 克隆 / 重命名`。
+- 删除、重命名运行中实例必须拒绝并提示先停止该实例。
 
 ## 3. 常用方法速查
 
@@ -183,7 +195,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 : 先运行 `python tools/button_extract.py`。
 
 - 页面识别卡 unknown
-: 检查 `window_title_keyword`、窗口平台（QQ/微信）、模板是否与平台匹配。
+: 检查 `window_title_keyword`、`window_select_rule`、窗口平台（QQ/微信）、模板是否与平台匹配。
 
 - 任务未执行
 : 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds`、`priority`。
@@ -199,7 +211,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 
 - 若改动调度规则、任务入口、配置结构，必须同步更新：
 1. `README.md`
-2. 本文件 `AGENTTS.md`
+2. 本文件 `AGENTS.md`
 
 ## 11. NIKKE 任务执行范式（参考实现）
 
