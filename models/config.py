@@ -108,7 +108,7 @@ class TaskScheduleItemConfig(BaseModel):
     priority: int = 10
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
-    daily_time: str = '04:00'
+    daily_time: str = '00:01'
     failure_interval_seconds: int = 60
     features: dict[str, bool] = Field(default_factory=dict)
 
@@ -134,13 +134,13 @@ class TaskScheduleItemConfig(BaseModel):
     @classmethod
     def _normalize_daily_time(cls, value):
         """规范化 `daily_time` 输入值。"""
-        text = str(value or '04:00').strip()
+        text = str(value or '00:01').strip()
         if not re.match(r'^\d{2}:\d{2}$', text):
-            return '04:00'
+            return '00:01'
         hour = int(text[:2])
         minute = int(text[3:5])
         if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-            return '04:00'
+            return '00:01'
         return f'{hour:02d}:{minute:02d}'
 
     @field_validator('features', mode='before')

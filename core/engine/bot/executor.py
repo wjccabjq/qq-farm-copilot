@@ -170,12 +170,12 @@ class BotExecutorMixin:
     def _seconds_to_next_daily(daily_time: str, now: datetime | None = None) -> int:
         """计算距离下一次每日触发时间的秒数。"""
         current = now or datetime.now()
-        text = str(daily_time or '04:00')
+        text = str(daily_time or '00:01')
         try:
             hour = int(text[:2])
             minute = int(text[3:5])
         except Exception:
-            hour, minute = 4, 0
+            hour, minute = 0, 1
         target = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if target <= current:
             target = target + timedelta(days=1)

@@ -319,7 +319,7 @@ class TaskPanel(QWidget):
                     hh, mm = str(task_cfg.daily_time).split(':')
                     daily_time.setTime(QTime(int(hh), int(mm)))
                 except Exception:
-                    daily_time.setTime(QTime(4, 0))
+                    daily_time.setTime(QTime(0, 1))
                 self._refresh_daily_next_text(task_name)
 
         for i in range(self._empty_policy.count()):
