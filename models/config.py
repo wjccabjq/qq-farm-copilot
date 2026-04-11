@@ -3,6 +3,7 @@
 import json
 import os
 import re
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
@@ -101,6 +102,9 @@ class TaskTriggerType(str, Enum):
     DAILY = 'daily'
 
 
+DEFAULT_TASK_NEXT_RUN = '2026-01-01 00:00'
+
+
 class TaskScheduleItemConfig(BaseModel):
     """定义 `TaskScheduleItemConfig` 的配置数据结构与默认值。"""
 
@@ -109,6 +113,7 @@ class TaskScheduleItemConfig(BaseModel):
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
     daily_time: str = '00:01'
+    next_run: str = DEFAULT_TASK_NEXT_RUN
     failure_interval_seconds: int = 60
     features: dict[str, bool] = Field(default_factory=dict)
 
@@ -142,6 +147,21 @@ class TaskScheduleItemConfig(BaseModel):
         if hour < 0 or hour > 23 or minute < 0 or minute > 59:
             return '00:01'
         return f'{hour:02d}:{minute:02d}'
+
+    @field_validator('next_run', mode='before')
+    @classmethod
+    def _normalize_next_run(cls, value):
+        """规范化 `next_run` 输入值。"""
+        if isinstance(value, datetime):
+            return value.replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+        text = str(value or DEFAULT_TASK_NEXT_RUN).strip().replace('T', ' ')
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
+            try:
+                dt = datetime.strptime(text, fmt)
+                return dt.strftime(fmt)
+            except Exception:
+                continue
+        return DEFAULT_TASK_NEXT_RUN
 
     @field_validator('features', mode='before')
     @classmethod
