@@ -53,6 +53,19 @@ class InstanceManager:
     def __init__(self):
         self._sessions: list[InstanceSession] = []
         self._active_instance_id: str = 'default'
+        self._last_saved_meta: dict[str, Any] | None = None
+        self._meta_dirty: bool = True
+
+    def _build_profiles_meta(self) -> dict[str, Any]:
+        """构建当前应持久化的实例元数据。"""
+        return {
+            'active_instance_id': self._active_instance_id,
+            'instances': [session.to_meta() for session in self._sessions],
+        }
+
+    def _mark_meta_dirty(self) -> None:
+        """标记实例元数据需要持久化。"""
+        self._meta_dirty = True
 
     def load(self) -> None:
         """加载实例元数据与配置。"""
@@ -77,16 +90,23 @@ class InstanceManager:
                 self._active_instance_id = self._sessions[0].instance_id
                 changed = True
             if changed:
+                self._mark_meta_dirty()
                 self.save()
+            else:
+                self._last_saved_meta = self._build_profiles_meta()
+                self._meta_dirty = False
 
     def save(self) -> None:
         """保存实例元数据。"""
-        save_profiles_meta(
-            {
-                'active_instance_id': self._active_instance_id,
-                'instances': [session.to_meta() for session in self._sessions],
-            }
-        )
+        if not self._meta_dirty:
+            return
+        data = self._build_profiles_meta()
+        if self._last_saved_meta == data:
+            self._meta_dirty = False
+            return
+        save_profiles_meta(data)
+        self._last_saved_meta = data
+        self._meta_dirty = False
 
     def _build_session(self, instance_id: str, name: str, raw: dict[str, Any] | None = None) -> InstanceSession:
         paths = InstancePaths.from_instance_id(instance_id)
@@ -131,6 +151,7 @@ class InstanceManager:
         if session is None:
             raise KeyError(f'instance not found: {instance_id}')
         self._active_instance_id = session.instance_id
+        self._mark_meta_dirty()
         self.save()
         return session
 
@@ -140,6 +161,7 @@ class InstanceManager:
         session = self._build_session(meta['id'], str(meta['name']), meta)
         self._sessions.append(session)
         self._active_instance_id = session.instance_id
+        self._mark_meta_dirty()
         self.save()
         return session
 
@@ -152,6 +174,7 @@ class InstanceManager:
         session = self._build_session(meta['id'], str(meta['name']), meta)
         self._sessions.append(session)
         self._active_instance_id = session.instance_id
+        self._mark_meta_dirty()
         self.save()
         return session
 
@@ -164,6 +187,7 @@ class InstanceManager:
         if candidate.casefold() == session.instance_id.casefold():
             session.name = str(new_name or session.instance_id)
             session.touch()
+            self._mark_meta_dirty()
             self.save()
             return session
 
@@ -189,6 +213,7 @@ class InstanceManager:
         session.touch()
         if self._active_instance_id == sanitize_instance_name(instance_id):
             self._active_instance_id = session.instance_id
+        self._mark_meta_dirty()
         self.save()
         return session
 
@@ -203,4 +228,5 @@ class InstanceManager:
         delete_instance(session.instance_id)
         if self._active_instance_id == session.instance_id:
             self._active_instance_id = self._sessions[0].instance_id
+        self._mark_meta_dirty()
         self.save()
