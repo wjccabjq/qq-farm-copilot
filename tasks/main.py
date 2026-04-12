@@ -28,6 +28,12 @@ LAND_MATCH_Y_RANGE = (350, 850)
 FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS = 0.5
 FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS = 1.0
 FIRST_CLICK_SIDE_MARGIN_RATIO = 0.2
+BACKGROUND_TREE_BASELINE_POINT = (188, 314)
+BACKGROUND_TREE_OFFSET_THRESHOLD = 30
+BACKGROUND_TREE_SWIPE_H_P1 = (230, 190)
+BACKGROUND_TREE_SWIPE_H_P2 = (200, 190)
+BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
+BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
 LEVEL_OCR_REGION_QQ = (130, 102, 160, 125)
 LEVEL_OCR_REGION_WECHAT = (67, 102, 97, 125)
 
@@ -268,19 +274,32 @@ class TaskMain(TaskBase):
         self.ui.device.click_button(GOTO_MAIN)
         while 1:
             self.ui.device.screenshot()
-            if self.ui.appear(BTN_LAND_RIGHT, offset=30, threshold=0.9, static=False) and self.ui.appear(
-                BTN_LAND_LEFT, offset=30, threshold=0.9, static=False
-            ):
+            anchor = self._get_labor_anchor_location()
+            if anchor is None:
+                logger.warning('自动播种流程: 未识别到背景树锚点')
                 break
-            # 检查土地位置
-            if not self.ui.appear(BTN_LAND_RIGHT, offset=30, threshold=0.9, static=False):
-                self.ui.device.swipe((270, 220), (240, 220), speed=30, delay=1, hold=0.1)
-                logger.error('土地存在遮挡，画面左移')
+
+            offset_x = int(anchor[0] - BACKGROUND_TREE_BASELINE_POINT[0])
+            offset_y = int(anchor[1] - BACKGROUND_TREE_BASELINE_POINT[1])
+            if abs(offset_x) > BACKGROUND_TREE_OFFSET_THRESHOLD:
+                if offset_x > 0:
+                    p1, p2, direction = BACKGROUND_TREE_SWIPE_H_P1, BACKGROUND_TREE_SWIPE_H_P2, '左'
+                else:
+                    p1, p2, direction = BACKGROUND_TREE_SWIPE_H_P2, BACKGROUND_TREE_SWIPE_H_P1, '右'
+                self.ui.device.swipe(p1, p2, speed=30, delay=0.5, hold=0.1)
+                logger.info('自动播种流程: 背景树横向偏移={}px，画面{}移', offset_x, direction)
                 continue
-            if not self.ui.appear(BTN_LAND_LEFT, offset=30, threshold=0.9, static=False):
-                self.ui.device.swipe((240, 220), (270, 220), speed=30, delay=1, hold=0.1)
-                logger.error('土地存在遮挡，画面右移')
+
+            if abs(offset_y) > BACKGROUND_TREE_OFFSET_THRESHOLD:
+                if offset_y > 0:
+                    p1, p2, direction = BACKGROUND_TREE_SWIPE_V_P1, BACKGROUND_TREE_SWIPE_V_P2, '上'
+                else:
+                    p1, p2, direction = BACKGROUND_TREE_SWIPE_V_P2, BACKGROUND_TREE_SWIPE_V_P1, '下'
+                self.ui.device.swipe(p1, p2, speed=30, delay=0.5, hold=0.1)
+                logger.info('自动播种流程: 背景树纵向偏移={}px，画面{}移', offset_y, direction)
                 continue
+
+            break
 
         # 判断是否需要播种
         # has_land = self.ui.appear_any(LAND_LIST, offset=30, threshold=0.89, static=False)
@@ -420,7 +439,7 @@ class TaskMain(TaskBase):
 
     @staticmethod
     def _get_first_click_labor_delay_seconds(land_x: int, frame_width: int) -> float:
-        """按首次点击坐标估算识别劳动最光荣前的等待时间。"""
+        """按首次点击坐标估算识别背景树前的等待时间。"""
         if frame_width <= 0:
             return FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS
         side_margin = int(frame_width * FIRST_CLICK_SIDE_MARGIN_RATIO)
@@ -429,9 +448,9 @@ class TaskMain(TaskBase):
         return FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS
 
     def _get_labor_anchor_location(self) -> tuple[int, int] | None:
-        """识别劳动最光荣锚点位置，用于估计画面平移。"""
+        """识别背景树锚点位置，用于估计画面平移。"""
         self.ui.device.screenshot()
-        return self.ui.appear_location(BTN_LABOR_IS_GLORIOUS, offset=30, threshold=0.7, static=False)
+        return self.ui.appear_location(BTN_BACKGROUND_TREE, offset=30, threshold=0.8, static=False)
 
     @staticmethod
     def _shift_land_coords(coords: list[tuple[int, int]], dx: float, dy: float) -> list[tuple[int, int]]:
@@ -539,7 +558,7 @@ class TaskMain(TaskBase):
                 logger.info('自动播种流程: 画面偏移 {:.1f}px，已修正播种坐标', drift)
             land_coords = self._shift_land_coords(land_coords, dx, dy)
         else:
-            logger.warning('自动播种流程: 劳动最光荣锚点识别失败，继续使用原始地块坐标')
+            logger.warning('自动播种流程: 背景树锚点识别失败，继续使用原始地块坐标')
 
         # 选择种子
         seed_det = None
