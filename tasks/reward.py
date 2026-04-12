@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import pyautogui
+from loguru import logger
+
 from core.engine.task.registry import TaskResult
-from core.ui.assets import BTN_CLOSE, BTN_CONFIRM, BTN_DIRECT_CLAIM, TASK_CHECK
-from core.ui.page import page_main
+from core.ui.assets import (
+    ASSET_NAME_TO_CONST,
+    BTN_CLAIM_TASK,
+    BTN_DIRECT_CLAIM,
+    BTN_SHARE_YELLOW,
+)
+from core.ui.page import page_main, page_task
 from tasks.base import TaskBase
+
+BTN_TASK_DAILY_TAB = ASSET_NAME_TO_CONST.get('btn_task_daily')
+BTN_TASK_GROWTH_TAB = ASSET_NAME_TO_CONST.get('btn_task_growth')
 
 
 class TaskReward(TaskBase):
@@ -17,25 +28,63 @@ class TaskReward(TaskBase):
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行任务奖励领取并返回调度结果。"""
-        self.ui.ui_ensure(page_main)
+        _ = rect
+        features = self.get_features('reward')
+        enable_daily = self.has_feature(features, 'claim_daily_task', default=True)
+        enable_growth = self.has_feature(features, 'claim_growth_task', default=True)
+        logger.info('奖励流程: 开始 | 每日任务={} 成长任务={}', enable_daily, enable_growth)
+        if enable_daily or enable_growth:
+            self.ui.ui_ensure(page_task, confirm_wait=0.3)
 
-        self._run_reward_flow()
+        if enable_daily:
+            self._run_daily_flow()
+        if enable_growth:
+            self._run_growth_flow()
+
+        self.ui.ui_ensure(page_main)
+        logger.info('奖励流程: 结束')
         return self.ok()
 
-    def _run_reward_flow(self):
+    def _run_daily_flow(self):
         """执行任务奖励领取流程。"""
-        if not self.ui.appear(TASK_CHECK, offset=(30, 30), threshold=0.85):
-            return
+        logger.info('奖励流程: 检查每日任务')
 
         while 1:
             self.ui.device.screenshot()
-
-            if self.ui.appear_then_click(BTN_DIRECT_CLAIM, offset=(30, 30), interval=1, threshold=0.8, static=False):
-                return
-
-            if self.ui.appear_then_click_any(
-                [BTN_CLOSE, BTN_CONFIRM], offset=(30, 30), interval=1, threshold=0.8, static=False
-            ):
+            if self.ui.handle_click_close():
                 continue
+            if self.ui.appear_then_click(BTN_CLAIM_TASK, offset=(-30, -10, 30, 300), interval=1):
+                continue
+            if not self.ui.appear(BTN_CLAIM_TASK, offset=(-30, -10, 30, 300)):
+                break
+        return
+
+    def _run_growth_flow(self):
+        """执行任务奖励领取流程。"""
+        logger.info('奖励流程: 检查成长任务')
+        platform = getattr(self.engine.config.planting, 'window_platform', 'qq')
+        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        if platform_value != 'wechat':
+            logger.warning('分享流程: 当前平台={}，直接领取，不分享', platform_value)
+
+        while 1:
+            self.ui.device.screenshot()
+            if self.ui.handle_click_close():
+                continue
+            if self.ui.appear_then_click(BTN_CLAIM_TASK, offset=(-30, -250, 30, 10)):
+                continue
+            if self.ui.appear(BTN_SHARE_YELLOW, offset=30, static=False):
+                if platform_value == 'wechat' and self.ui.appear_then_click(
+                    BTN_SHARE_YELLOW, offset=30, interval=3, static=False
+                ):
+                    self.ui.device.sleep(2)
+                    pyautogui.press('escape')
+                    continue
+                if platform_value != 'wechat' and self.ui.appear_then_click(
+                    BTN_DIRECT_CLAIM, offset=30, interval=1, static=False
+                ):
+                    continue
+            if not self.ui.appear(BTN_CLAIM_TASK, offset=(-30, -250, 30, 10)):
+                break
 
         return

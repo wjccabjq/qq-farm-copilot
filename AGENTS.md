@@ -161,7 +161,7 @@
 : 独立分享任务，仅执行分享领奖流程（仅支持微信平台；无 `features` 分项开关）。
 
 - `reward`
-: 独立任务奖励领取任务，仅执行任务奖励领取（无 `features` 分项开关）。
+: 独立任务奖励领取任务，支持分项开关：`features.claim_growth_task`（默认 false）、`features.claim_daily_task`（默认 true）。
 
 - `gift`
 : 物品领取任务，支持分项开关：`features.auto_svip_gift`（默认 true）、`features.auto_mall_gift`（默认 true）、`features.auto_mail`（默认 true，依赖 `menu_goto_mail` 模板，缺失时自动跳过）。

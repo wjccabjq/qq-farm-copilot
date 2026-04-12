@@ -32,6 +32,7 @@ class UI(Handler):
         page_wiki,
         page_mail,
         page_menu,
+        page_share,
     ]
 
     def __init__(
@@ -154,7 +155,7 @@ class UI(Handler):
                 if not page.parent:
                     continue
                 page_switch_key = f'ui_goto_page::{page.name}'
-                if not self._button_interval_ready(page_switch_key, 4.0):
+                if not self._button_interval_ready(page_switch_key, 2.0):
                     continue
                 if not self.ui_page_appear(page):
                     continue

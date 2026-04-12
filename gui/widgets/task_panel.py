@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QCheckBox,
     QComboBox,
-    QFrame,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -151,7 +151,7 @@ class TaskPanel(QWidget):
             switch_layout.addWidget(enabled)
             hint_label = QLabel(hint_text)
             hint_label.setWordWrap(True)
-            hint_label.setStyleSheet('color: #94a3b8; font-size: 12px;')
+            hint_label.setStyleSheet('color: #dc2626; font-size: 12px;')
             switch_layout.addWidget(hint_label, 1)
             form.addRow(self._switch_label, switch_row)
         else:

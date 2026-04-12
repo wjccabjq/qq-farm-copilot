@@ -48,7 +48,7 @@ class TaskShare(TaskBase):
                 continue
             if self.ui.appear(BTN_SHARE_GREEN, offset=30) and self.ui.appear(BTN_SHARE_RED_POINT, offset=30):
                 break
-            if self.ui.appear_then_click(BTN_SHARE_GREEN, offset=30, interval=2, static=False):
+            if self.ui.appear_then_click(BTN_SHARE_GREEN, offset=30, interval=3, static=False):
                 self.ui.device.sleep(2)
                 pyautogui.press('escape')
                 continue

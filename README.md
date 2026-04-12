@@ -178,7 +178,10 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 21600,
     "failure_interval_seconds": 300,
-    "features": {}
+    "features": {
+      "claim_growth_task": false,
+      "claim_daily_task": true
+    }
   },
   "gift": {
     "enabled": true,

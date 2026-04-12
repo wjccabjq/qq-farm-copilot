@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QVBoxLayout,
     QWidget,
@@ -44,6 +45,8 @@ class FeaturePanel(QWidget):
         panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('feature_panel', {})
         self._task_title_map = panel_labels.get('task_titles', {})
         self._feature_label_map = panel_labels.get('feature_labels', {})
+        feature_hints = panel_labels.get('feature_hints', {})
+        self._feature_hint_map = feature_hints if isinstance(feature_hints, dict) else {}
         self._enabled_text = str(panel_labels.get('enabled', 'Enable'))
         self._empty_text = str(panel_labels.get('empty_text', 'No configurable feature items'))
         self._task_title_suffix = str(panel_labels.get('task_title_suffix', ' task'))
@@ -96,9 +99,28 @@ class FeaturePanel(QWidget):
             label = self._feature_label_map.get(feature_name, feature_name)
             cb = QCheckBox(self._enabled_text)
             self._feature_boxes[(task_name, feature_name)] = cb
-            form.addRow(f'{label}:', cb)
+            hint_text = self._feature_hint_text(task_name, feature_name)
+            if hint_text:
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(8)
+                row_layout.addWidget(cb)
+                hint_label = QLabel(hint_text)
+                hint_label.setWordWrap(True)
+                hint_label.setStyleSheet('color: #dc2626; font-size: 12px;')
+                row_layout.addWidget(hint_label, 1)
+                form.addRow(f'{label}:', row_widget)
+            else:
+                form.addRow(f'{label}:', cb)
         group.setLayout(form)
         return group
+
+    def _feature_hint_text(self, task_name: str, feature_name: str) -> str:
+        """读取功能项提示文本，优先 task.feature 级别。"""
+        full_key = f'{task_name}.{feature_name}'
+        text = self._feature_hint_map.get(full_key, self._feature_hint_map.get(feature_name, ''))
+        return str(text or '').strip()
 
     def _connect_auto_save(self):
         """绑定 `auto_save` 相关信号或回调。"""
