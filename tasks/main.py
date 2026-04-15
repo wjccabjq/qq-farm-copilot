@@ -21,23 +21,42 @@ from utils.number_box_detector import NumberBoxDetector
 from utils.ocr_utils import OCRTool
 from utils.shop_item_ocr import ShopItemOCR
 
+# 商店列表上滑的起点坐标（用于翻页查找种子）。
 SHOP_LIST_SWIPE_START = (270, 300)
+# 商店列表上滑的终点坐标（与起点配合形成上滑手势）。
 SHOP_LIST_SWIPE_END = (270, 860)
 
+# 可播种空地模板集合（用于匹配可操作地块）。
 LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
+# 空地模板命中的中心点 y 轴过滤区间，避免匹配到顶部 UI/底部无关区域。
 LAND_MATCH_Y_RANGE = (350, 850)
+# 首次点击地块后，常规场景等待背景树锚点稳定的时长。
 FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS = 0.5
+# 首次点击位于屏幕边缘时，额外增加的等待时长。
 FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS = 1.0
+# 屏幕左右边缘判定比例（用于应用 side delay）。
 FIRST_CLICK_SIDE_MARGIN_RATIO = 0.2
+# 背景树锚点在基准截图中的参考坐标（用于估算画面偏移）。
 BACKGROUND_TREE_BASELINE_POINT = (188, 314)
+# 背景树偏移超过该阈值时触发画面回正。
 BACKGROUND_TREE_OFFSET_THRESHOLD = 30
+# 画面横向回正手势点位 P1。
 BACKGROUND_TREE_SWIPE_H_P1 = (230, 190)
+# 画面横向回正手势点位 P2。
 BACKGROUND_TREE_SWIPE_H_P2 = (200, 190)
+# 画面纵向回正手势点位 P1。
 BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
+# 画面纵向回正手势点位 P2。
 BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
-SEED_POPUP_NUMBER_BOX_Y_ABOVE = 50
-SEED_POPUP_NUMBER_BOX_Y_BELOW = 30
+# 数字框横向约束区间（基于主界面截图绝对坐标）。
+SEED_POPUP_NUMBER_BOX_MIN_X = 45
+SEED_POPUP_NUMBER_BOX_MAX_X = 500
+# 数字框纵向约束区间（基于“点击地块 y”做相对偏移）。
+SEED_POPUP_NUMBER_BOX_Y_OFFSET_TOP = 40
+SEED_POPUP_NUMBER_BOX_Y_OFFSET_BOTTOM = 130
+# QQ 平台主界面等级 OCR ROI（x1, y1, x2, y2）。
 LEVEL_OCR_REGION_QQ = (130, 102, 160, 125)
+# 微信平台主界面等级 OCR ROI（x1, y1, x2, y2）。
 LEVEL_OCR_REGION_WECHAT = (67, 102, 97, 125)
 
 
@@ -504,19 +523,31 @@ class TaskMain(TaskBase):
                     break
         return excluded_orders
 
-    def _filter_number_boxes_by_seed_popup_y(self, number_boxes: list, popup_location: tuple[int, int] | None) -> list:
-        """按种子弹窗右侧按钮的 y 坐标过滤数字框，降低误检。"""
-        if not number_boxes or popup_location is None:
+    def _filter_number_boxes_by_seed_popup_y(
+        self, number_boxes: list, land_click_point: tuple[int, int] | None
+    ) -> list:
+        """按点击地块坐标偏移范围过滤数字框，降低误检。"""
+        if not number_boxes or land_click_point is None:
             return number_boxes
 
-        popup_y = int(popup_location[1])
-        min_y = popup_y - int(SEED_POPUP_NUMBER_BOX_Y_ABOVE)
-        max_y = popup_y + int(SEED_POPUP_NUMBER_BOX_Y_BELOW)
-        filtered = [box for box in number_boxes if min_y <= int(box.center[1]) <= max_y]
+        click_y = int(land_click_point[1])
+        min_x = int(SEED_POPUP_NUMBER_BOX_MIN_X)
+        max_x = int(SEED_POPUP_NUMBER_BOX_MAX_X)
+        min_y = click_y + int(SEED_POPUP_NUMBER_BOX_Y_OFFSET_TOP)
+        max_y = click_y + int(SEED_POPUP_NUMBER_BOX_Y_OFFSET_BOTTOM)
+        if min_x > max_x:
+            min_x, max_x = max_x, min_x
+        if min_y > max_y:
+            min_y, max_y = max_y, min_y
+        filtered = [
+            box for box in number_boxes if min_x <= int(box.center[0]) <= max_x and min_y <= int(box.center[1]) <= max_y
+        ]
         logger.info(
-            '自动播种流程: 数字框按弹窗y过滤 | popup_y={} keep_range=[{}, {}] raw={} filtered={}',
-            popup_y,
+            '自动播种流程: 数字框按地块偏移过滤 | click_y={} keep_range=({}, {}, {}, {}) raw={} filtered={}',
+            click_y,
+            min_x,
             min_y,
+            max_x,
             max_y,
             len(number_boxes),
             len(filtered),
@@ -552,15 +583,10 @@ class TaskMain(TaskBase):
             if open_seed_clicks == 1:
                 frame_width = int(cv_img.shape[1]) if cv_img is not None and len(cv_img.shape) >= 2 else 0
                 first_click_labor_delay_seconds = self._get_first_click_labor_delay_seconds(int(land_x), frame_width)
-            popup_location = self.ui.appear_location(
-                BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False
-            )
-            popup_visible = popup_location is not None
             number_boxes = self.number_box_detector.detect_boxes(cv_img)
-            if popup_visible:
-                number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, popup_location)
+            number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, (int(land_x), int(land_y)))
             # 检查种子选择框/数字框出现
-            if popup_visible or number_boxes:
+            if number_boxes:
                 seed_panel_boxes = number_boxes
                 if use_warehouse_first and number_boxes:
                     excluded_seed_box_orders = self._collect_excluded_seed_box_orders(number_boxes)
@@ -605,12 +631,8 @@ class TaskMain(TaskBase):
             active_excluded_orders = excluded_seed_box_orders
             if not number_boxes:
                 cv_img = self.ui.device.screenshot()
-                popup_location = self.ui.appear_location(
-                    BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False
-                )
                 number_boxes = self.number_box_detector.detect_boxes(cv_img)
-                if popup_location is not None:
-                    number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, popup_location)
+                number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, seed_popup_land)
                 active_excluded_orders = self._collect_excluded_seed_box_orders(number_boxes)
             available_boxes = [box for box in number_boxes if int(box.order) not in active_excluded_orders]
             if available_boxes:
