@@ -480,7 +480,7 @@ class TaskMain(TaskBase):
 
     def _wait_labor_anchor_stable(self) -> tuple[int, int] | None:
         """等待背景树锚点连续稳定一段时间后返回坐标。"""
-        stable_timer = Timer(self.config.planting.planting_stable_seconds, count=3)
+        stable_timer = Timer(self.engine.config.planting.planting_stable_seconds, count=3)
         timeout_timer = Timer(BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS, count=1).start()
         last_anchor: tuple[int, int] | None = None
         while 1:
