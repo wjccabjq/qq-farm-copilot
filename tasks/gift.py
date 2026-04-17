@@ -79,7 +79,7 @@ class TaskGift(TaskBase):
             self.ui.device.screenshot()
             if self.ui.handle_click_close():
                 continue
-            if self.ui.appear(BTN_MALL_FREE_DONE, offset=30):
+            if self.ui.appear(BTN_MALL_FREE_DONE, threshold=0.65, offset=30):
                 break
             if self.ui.appear_then_click(BTN_MALL_FREE, offset=30, threshold=0.65, interval=1):
                 continue
