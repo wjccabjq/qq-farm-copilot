@@ -216,6 +216,8 @@ class BotEngine(QObject):
         if self._event_queue is None:
             return
 
+        latest_screenshot_event: dict[str, Any] | None = None
+        latest_detection_event: dict[str, Any] | None = None
         for _ in range(max_events):
             try:
                 event = self._event_queue.get_nowait()
@@ -223,7 +225,22 @@ class BotEngine(QObject):
                 break
             except Exception:
                 break
+            if not isinstance(event, dict):
+                continue
+            etype = str(event.get('type') or '').strip().lower()
+            if etype == 'screenshot':
+                latest_screenshot_event = event
+                continue
+            if etype == 'detection':
+                latest_detection_event = event
+                continue
             self._handle_event(event)
+
+        # 预览类事件只处理每轮最新一帧，避免大量 PNG 解码堆积。
+        if latest_screenshot_event is not None:
+            self._handle_event(latest_screenshot_event)
+        if latest_detection_event is not None:
+            self._handle_event(latest_detection_event)
 
     def _send_command(
         self,

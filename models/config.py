@@ -96,8 +96,6 @@ class SafetyConfig(BaseModel):
 class ScreenshotConfig(BaseModel):
     """定义 `ScreenshotConfig` 的配置数据结构与默认值。"""
 
-    save_history: bool = True
-    max_history_count: int = 50
     capture_interval_seconds: float = 0.3
 
     @field_validator('capture_interval_seconds', mode='before')
