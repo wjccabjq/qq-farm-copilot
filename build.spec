@@ -41,7 +41,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['tools/pyi_rth_preload_onnxruntime.py'],
     excludes=['easyocr', 'torch', 'torchvision', 'torchaudio'],
     noarchive=False,
 )
