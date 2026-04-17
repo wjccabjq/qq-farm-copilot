@@ -9,6 +9,8 @@ from qfluentwidgets import (
     OptionsConfigItem,
     OptionsSettingCard,
     OptionsValidator,
+    PrimaryPushSettingCard,
+    SettingCard,
     SettingCardGroup,
     SwitchSettingCard,
 )
@@ -54,6 +56,7 @@ class GlobalSettingsPanel(QWidget):
     """应用级设置（主题/窗口效果）。"""
 
     apply_requested = pyqtSignal(str, bool)
+    check_update_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,6 +94,24 @@ class GlobalSettingsPanel(QWidget):
         self.theme_card.optionChanged.connect(lambda *_: self._emit_apply())
         self.mica_card.checkedChanged.connect(lambda *_: self._emit_apply())
         root.addWidget(self.settings_group)
+
+        self.version_group = SettingCardGroup('版本更新', self)
+        self.version_card = SettingCard(
+            FluentIcon.INFO,
+            '当前版本',
+            '-',
+            parent=self.version_group,
+        )
+        self.update_card = PrimaryPushSettingCard(
+            '立即检查',
+            FluentIcon.SYNC,
+            '检查更新',
+            '从 GitHub Release 获取最新版本',
+            parent=self.version_group,
+        )
+        self.update_card.clicked.connect(self.check_update_requested.emit)
+        self.version_group.addSettingCards([self.version_card, self.update_card])
+        root.addWidget(self.version_group)
         root.addStretch()
 
     def _emit_apply(self) -> None:
@@ -106,3 +127,9 @@ class GlobalSettingsPanel(QWidget):
         self.theme_card.setValue(value)
         self.mica_card.setChecked(bool(mica_enabled))
         self._loading = False
+
+    def set_version_text(self, current_version: str, detail: str = '') -> None:
+        version = str(current_version or '').strip() or '-'
+        detail_text = str(detail or '').strip()
+        content = f'v{version}' if not detail_text else f'v{version}（{detail_text}）'
+        self.version_card.setContent(content)
