@@ -326,9 +326,10 @@ class TaskFriend(TaskBase):
             return False
 
         current_x, current_y = current_location
-        detected_name = self._detect_friend_name_in_selected_row(current_x=current_x, current_y=current_y)
+        detected_name = ''
         step_offset = FRIEND_NEXT_OFFSET_X
         if self._friend_blacklist:
+            detected_name = self._detect_friend_name_in_selected_row(current_x=current_x, current_y=current_y)
             hit_blacklist = self._is_blacklisted_friend_name(detected_name)
             if hit_blacklist:
                 step_offset = FRIEND_NEXT_OFFSET_X * 2 + 20
