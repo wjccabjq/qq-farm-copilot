@@ -307,6 +307,118 @@ class PlantingConfig(BaseModel):
         return max(1, min(999, level))
 
 
+LAND_COL_COUNT = 6
+LAND_ROW_COUNT = 4
+LAND_STATE_ALIASES: dict[str, str] = {
+    '未扩建': 'unbuilt',
+    '普通': 'normal',
+    '红': 'red',
+    '黑': 'black',
+    '金': 'gold',
+}
+LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold'}
+
+
+def build_default_land_plot_ids() -> list[str]:
+    """生成默认地块编号（视觉顺序：每行 `6 -> 1`）。"""
+    ids: list[str] = []
+    for row in range(LAND_ROW_COUNT):
+        for col in range(LAND_COL_COUNT):
+            display_col = LAND_COL_COUNT - col
+            ids.append(f'{display_col}-{row + 1}')
+    return ids
+
+
+def build_default_land_plots() -> list[dict[str, str]]:
+    """生成默认地块状态列表。"""
+    return [{'plot_id': plot_id, 'level': 'unbuilt'} for plot_id in build_default_land_plot_ids()]
+
+
+def normalize_land_level(value: Any) -> str:
+    """规范化地块等级值。"""
+    raw = str(value or '').strip()
+    if not raw:
+        return 'unbuilt'
+    lowered = raw.lower()
+    if lowered in LAND_STATE_VALUES:
+        return lowered
+    return LAND_STATE_ALIASES.get(raw, 'unbuilt')
+
+
+def normalize_land_plot_id(value: Any) -> str | None:
+    """规范化地块编号。"""
+    text = str(value or '').strip()
+    match = re.match(r'^(\d+)\s*-\s*(\d+)$', text)
+    if not match:
+        return None
+    col = int(match.group(1))
+    row = int(match.group(2))
+    if col < 1 or col > LAND_COL_COUNT or row < 1 or row > LAND_ROW_COUNT:
+        return None
+    return f'{col}-{row}'
+
+
+class LandDetailConfig(BaseModel):
+    """定义农场地块详情配置结构。"""
+
+    class ProfileConfig(BaseModel):
+        """定义个人信息字段。"""
+
+        level: int = 0
+        gold: str = ''
+        coupon: str = ''
+        exp: str = ''
+
+        @field_validator('level', mode='before')
+        @classmethod
+        def _normalize_level(cls, value):
+            """规范化等级字段。"""
+            try:
+                level = int(value)
+            except Exception:
+                level = 0
+            return max(0, min(999, level))
+
+        @field_validator('gold', 'coupon', 'exp', mode='before')
+        @classmethod
+        def _normalize_text_fields(cls, value):
+            """规范化文本字段。"""
+            return str(value or '').strip()
+
+    plots: list[dict[str, str]] = Field(default_factory=build_default_land_plots)
+    profile: ProfileConfig = Field(default_factory=ProfileConfig)
+
+    @field_validator('plots', mode='before')
+    @classmethod
+    def _normalize_plots(cls, value):
+        """规范化地块详情列表，确保固定 24 格。"""
+        ordered_ids = build_default_land_plot_ids()
+        level_map: dict[str, str] = {plot_id: 'unbuilt' for plot_id in ordered_ids}
+
+        def _apply_item(plot_id_raw: Any, level_raw: Any) -> None:
+            normalized_id = normalize_land_plot_id(plot_id_raw)
+            if not normalized_id or normalized_id not in level_map:
+                return
+            level_map[normalized_id] = normalize_land_level(level_raw)
+
+        if isinstance(value, dict):
+            for plot_id, level in value.items():
+                _apply_item(plot_id, level)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _apply_item(item.get('plot_id'), item.get('level'))
+                    continue
+                try:
+                    dumped = item.model_dump()
+                except Exception:
+                    dumped = {}
+                if isinstance(dumped, dict):
+                    _apply_item(dumped.get('plot_id'), dumped.get('level'))
+
+        return [{'plot_id': plot_id, 'level': level_map[plot_id]} for plot_id in ordered_ids]
+
+
 class AppConfig(BaseModel):
     """定义 `AppConfig` 的配置数据结构与默认值。"""
 
@@ -317,6 +429,7 @@ class AppConfig(BaseModel):
     tasks: dict[str, TaskScheduleItemConfig] = Field(default_factory=dict)
     executor: ExecutorConfig = Field(default_factory=ExecutorConfig)
     planting: PlantingConfig = Field(default_factory=PlantingConfig)
+    land: LandDetailConfig = Field(default_factory=LandDetailConfig)
     sell: SellConfig = Field(default_factory=SellConfig)
 
     _config_path: str = PrivateAttr(default='')

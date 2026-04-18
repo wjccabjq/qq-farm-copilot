@@ -121,6 +121,15 @@
     "planting_stable_seconds": 0.5,
     "planting_stable_timeout_seconds": 3.0
   },
+  "land": {
+    "plots": [],
+    "profile": {
+      "level": 0,
+      "gold": "",
+      "coupon": "",
+      "exp": ""
+    }
+  },
   "sell": {
     "mode": "batch_all"
   }

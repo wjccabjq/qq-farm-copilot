@@ -79,6 +79,55 @@ class TaskMainLevelMixin:
             return None
         return x1, y1, x2, y2
 
+    @staticmethod
+    def _normalize_head_profile_text(value: object) -> str:
+        """规范化头部信息文本字段。"""
+        return str(value or '').strip()
+
+    def _sync_head_profile_from_ocr(self, *, level: int | None, extra_info: dict[str, object] | None) -> bool:
+        """将头部 OCR 结构化信息回写到 `config.land.profile`。"""
+        profile = getattr(getattr(self.engine.config, 'land', None), 'profile', None)
+        if profile is None:
+            return False
+
+        data = extra_info if isinstance(extra_info, dict) else {}
+        old_level = int(getattr(profile, 'level', 0))
+        old_gold = self._normalize_head_profile_text(getattr(profile, 'gold', ''))
+        old_coupon = self._normalize_head_profile_text(getattr(profile, 'coupon', ''))
+        old_exp = self._normalize_head_profile_text(getattr(profile, 'exp', ''))
+
+        new_level = int(level) if isinstance(level, int) and level > 0 else old_level
+        if new_level <= 0:
+            try:
+                ocr_level = int(data.get('level', 0))
+            except Exception:
+                ocr_level = 0
+            if ocr_level > 0:
+                new_level = ocr_level
+        gold_candidate = self._normalize_head_profile_text(data.get('gold', ''))
+        coupon_candidate = self._normalize_head_profile_text(data.get('coupon', ''))
+        exp_candidate = self._normalize_head_profile_text(data.get('exp', ''))
+        new_gold = gold_candidate or old_gold
+        new_coupon = coupon_candidate or old_coupon
+        new_exp = exp_candidate or old_exp
+
+        changed = old_level != new_level or old_gold != new_gold or old_coupon != new_coupon or old_exp != new_exp
+        if not changed:
+            return False
+
+        profile.level = new_level
+        profile.gold = new_gold
+        profile.coupon = new_coupon
+        profile.exp = new_exp
+        logger.info(
+            '等级识别: 个人信息已更新 | level={} gold={} coupon={} exp={}',
+            new_level,
+            new_gold or '-',
+            new_coupon or '-',
+            new_exp or '-',
+        )
+        return True
+
     def _sync_player_level_before_plant(self) -> int | None:
         """播种前识别主界面等级并回写配置。"""
         planting = self.engine.config.planting
@@ -112,6 +161,7 @@ class TaskMainLevelMixin:
             return None
 
         old_level = int(getattr(planting, 'player_level', 1))
+        accepted_level = int(level)
         if level < old_level:
             logger.warning(
                 '等级识别: OCR识别出错，忽略较低识别结果 | Lv{} -> Lv{} | roi={} score={:.3f} raw={}',
@@ -121,29 +171,51 @@ class TaskMainLevelMixin:
                 score,
                 raw_text,
             )
-            return old_level
-        if level == old_level:
-            logger.debug('等级识别: 等级未变化 | Lv{} score={:.3f}', level, score)
-            return level
+            accepted_level = old_level
 
-        planting.player_level = int(level)
+        level_changed = accepted_level > old_level
+        if level_changed:
+            planting.player_level = int(accepted_level)
+        else:
+            logger.debug('等级识别: 等级未变化 | Lv{} score={:.3f}', accepted_level, score)
+
+        profile_changed = self._sync_head_profile_from_ocr(level=accepted_level, extra_info=extra_info)
+        if not level_changed and not profile_changed:
+            return accepted_level
+
         try:
             self.engine.config.save()
         except Exception as exc:
-            logger.warning('等级识别: 等级已更新但保存配置失败 | Lv{} -> Lv{} | error={}', old_level, level, exc)
+            logger.warning(
+                '等级识别: 配置保存失败 | Lv{} -> Lv{} | profile_changed={} | error={}',
+                old_level,
+                accepted_level,
+                profile_changed,
+                exc,
+            )
         else:
             config_path = str(getattr(self.engine.config, '_config_path', '') or '')
-            logger.info(
-                '等级识别: 等级已更新 | Lv{} -> Lv{} | roi={} score={:.3f} raw={} config={}',
-                old_level,
-                level,
-                roi,
-                score,
-                raw_text,
-                config_path or 'default-config-path',
-            )
+            if level_changed:
+                logger.info(
+                    '等级识别: 等级已更新 | Lv{} -> Lv{} | roi={} score={:.3f} raw={} config={}',
+                    old_level,
+                    accepted_level,
+                    roi,
+                    score,
+                    raw_text,
+                    config_path or 'default-config-path',
+                )
+            else:
+                logger.info(
+                    '等级识别: 个人信息已保存 | Lv{} | roi={} score={:.3f} raw={} config={}',
+                    accepted_level,
+                    roi,
+                    score,
+                    raw_text,
+                    config_path or 'default-config-path',
+                )
             self._emit_config_updated()
-        return level
+        return accepted_level
 
     def _emit_config_updated(self) -> None:
         """向主进程广播配置已更新，触发设置面板刷新。"""
@@ -229,7 +301,6 @@ class TaskMain(
         # TODO 自动施肥
         if self.has_feature(features, 'auto_fertilize'):
             self._run_feature_fertilize()
-
 
         # TODO 自动升级
         if self.has_feature(features, 'auto_upgrade'):

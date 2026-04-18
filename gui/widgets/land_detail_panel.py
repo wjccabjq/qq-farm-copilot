@@ -1,21 +1,586 @@
-"""农场详情占位面板。"""
+"""土地详情面板。"""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel
+from dataclasses import dataclass
+
+from PyQt6.QtCore import QSignalBlocker, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QShowEvent
+from PyQt6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+from qfluentwidgets import (
+    BodyLabel,
+    CaptionLabel,
+    ComboBox,
+    FluentIcon,
+    IconWidget,
+    MessageBox,
+    ScrollArea,
+    StrongBodyLabel,
+    ToolButton,
+)
+
+from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
+from models.config import AppConfig
+
+
+@dataclass(frozen=True)
+class LandStateMeta:
+    """地块状态元数据。"""
+
+    value: str
+    label: str
+    bg_color: str
+    border_color: str
+    text_color: str = '#1f2937'
+
+
+LAND_STATE_META: dict[str, LandStateMeta] = {
+    # 颜色参考 templates/qq/land 下模板：
+    # black=(92,67,42) red=(223,87,55) gold=(249,203,50) stand=(178,131,74)
+    # 目录无“未扩建”模板，使用 stand 同色系浅化色，并以无背景+虚线框表现。
+    'unbuilt': LandStateMeta('unbuilt', '未扩建', '#D9C3A5', '#B2834A', '#5C432A'),
+    'normal': LandStateMeta('normal', '普通', '#C39A64', '#7A552D', '#F9F2E7'),
+    'red': LandStateMeta('red', '红', '#DF5737', '#9D3E27', '#FFF7F3'),
+    'black': LandStateMeta('black', '黑', '#5C432A', '#3B2B1C', '#F8F5EF'),
+    'gold': LandStateMeta('gold', '金', '#F9CB32', '#B78918', '#3C2B05'),
+}
+
+LAND_STATE_ORDER: list[str] = ['unbuilt', 'normal', 'red', 'black', 'gold']
+LAND_STATE_ALIASES: dict[str, str] = {
+    '未扩建': 'unbuilt',
+    '普通': 'normal',
+    '红': 'red',
+    '黑': 'black',
+    '金': 'gold',
+}
+LAND_STATE_RANK: dict[str, int] = {
+    'unbuilt': 0,
+    'normal': 1,
+    'red': 2,
+    'black': 3,
+    'gold': 4,
+}
+
+
+class LandCell(QWidget):
+    """单个地块格子。"""
+
+    state_changed = pyqtSignal(str, str)
+
+    def __init__(self, plot_id: str, parent=None):
+        super().__init__(parent)
+        self.plot_id = str(plot_id)
+        self._init_ui()
+        self.set_data({'level': 'unbuilt'})
+        self.set_editable(False)
+
+    def _init_ui(self) -> None:
+        self.setObjectName('landCell')
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(96)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(6)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(0)
+        header.addStretch()
+        self._plot_label = CaptionLabel(self.plot_id, self)
+        self._plot_label.setObjectName('plotLabel')
+        self._plot_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        header.addWidget(self._plot_label, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        root.addLayout(header)
+
+        root.addStretch(1)
+
+        self._state_view = BodyLabel('', self)
+        self._state_view.setObjectName('stateView')
+        self._state_view.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._state_view.setFixedHeight(26)
+        root.addWidget(self._state_view)
+
+        self._state_combo = ComboBox(self)
+        self._state_combo.setObjectName('stateCombo')
+        self._state_combo.setFixedHeight(30)
+        self._state_combo.setMaxVisibleItems(len(LAND_STATE_ORDER))
+        for state in LAND_STATE_ORDER:
+            meta = LAND_STATE_META[state]
+            self._state_combo.addItem(meta.label, userData=state)
+        self._state_combo.currentIndexChanged.connect(self._on_state_changed)
+        root.addWidget(self._state_combo)
+
+    @staticmethod
+    def _normalize_state(raw: object) -> str:
+        value = str(raw or '').strip()
+        if not value:
+            return 'unbuilt'
+        key = value.lower()
+        if key in LAND_STATE_META:
+            return key
+        return LAND_STATE_ALIASES.get(value, 'unbuilt')
+
+    def _current_state(self) -> str:
+        return self._normalize_state(self._state_combo.currentData())
+
+    def _on_state_changed(self, _index: int) -> None:
+        state = self._current_state()
+        self._apply_state_style(state)
+        self._state_view.setText(LAND_STATE_META.get(state, LAND_STATE_META['unbuilt']).label)
+        self.state_changed.emit(self.plot_id, state)
+
+    def _apply_state_style(self, state: str) -> None:
+        meta = LAND_STATE_META.get(state, LAND_STATE_META['unbuilt'])
+        if state == 'unbuilt':
+            cell_style = (
+                'background-color: transparent;'
+                'border-color: #cbd5e1;'
+                'border-width: 2px;'
+                'border-style: dashed;'
+                'border-radius: 10px;'
+            )
+        else:
+            cell_style = f'background-color: {meta.bg_color};border: none;border-radius: 10px;'
+        self.setStyleSheet(cell_style)
+        self._plot_label.setStyleSheet(
+            f'color: {meta.text_color}; font-size: 12px; font-weight: 700; border: none; background: transparent;'
+        )
+        self._state_view.setStyleSheet(
+            'background: rgba(255, 255, 255, 0.92);'
+            'border: 1px solid rgba(15, 23, 42, 0.20);'
+            'border-radius: 6px;'
+            'color: #0f172a; font-size: 12px; font-weight: 600;'
+            'padding: 2px 6px;'
+        )
+
+    def set_data(self, data: dict[str, object]) -> None:
+        state = self._normalize_state(data.get('level', 'unbuilt'))
+        state_index = self._state_combo.findData(state)
+        if state_index < 0:
+            state_index = 0
+        with QSignalBlocker(self._state_combo):
+            self._state_combo.setCurrentIndex(state_index)
+        self._state_view.setText(LAND_STATE_META.get(state, LAND_STATE_META['unbuilt']).label)
+        self._apply_state_style(state)
+
+    def get_data(self) -> dict[str, object]:
+        return {
+            'plot_id': self.plot_id,
+            'level': self._current_state(),
+        }
+
+    def set_editable(self, editable: bool) -> None:
+        is_edit = bool(editable)
+        self._state_combo.setVisible(is_edit)
+        self._state_combo.setEnabled(is_edit)
+        self._state_view.setVisible(False)
 
 
 class LandDetailPanel(QWidget):
-    """农场详情页（占位）。"""
+    """土地详情标签页。"""
 
-    def __init__(self, parent=None):
+    config_changed = pyqtSignal(object)
+
+    COL_COUNT = 6
+    ROW_COUNT = 4
+    CELL_GAP = 8
+
+    def __init__(self, config: AppConfig, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        self.config = config
+        self._cells: dict[str, LandCell] = {}
+        self._profile_value_labels: dict[str, StrongBodyLabel] = {}
+        self._editing = False
+        self._init_ui()
+        self._load_from_config()
+        self._set_edit_mode(False)
 
-        hint = BodyLabel('农场详情功能开发中')
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(hint, 1)
+    @staticmethod
+    def _plot_id_at(row_index: int, col_index: int) -> str:
+        # 视觉从左到右显示为 6 -> 1，确保右上角是 1-1、左上角是 6-1。
+        display_col = 6 - col_index
+        return f'{display_col}-{row_index + 1}'
+
+    @classmethod
+    def _plot_ids_visual_order(cls) -> list[str]:
+        return [cls._plot_id_at(row, col) for row in range(cls.ROW_COUNT) for col in range(cls.COL_COUNT)]
+
+    def _init_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        scroll = ScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        root.addWidget(scroll)
+
+        content = TransparentCardContainer(self)
+        scroll.setWidget(content)
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+        scroll.viewport().setStyleSheet('background: transparent;')
+
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(10, 8, 10, 8)
+        content_layout.setSpacing(10)
+
+        self._profile_card = StableElevatedCardWidget(self)
+        self._profile_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        self._apply_card_style(self._profile_card, 'landProfileCard')
+        content_layout.addWidget(self._profile_card)
+
+        profile_layout = QVBoxLayout(self._profile_card)
+        profile_layout.setContentsMargins(12, 10, 12, 10)
+        profile_layout.setSpacing(9)
+
+        profile_header = QWidget(self._profile_card)
+        profile_header_layout = QHBoxLayout(profile_header)
+        profile_header_layout.setContentsMargins(0, 0, 0, 0)
+        profile_header_layout.setSpacing(8)
+        profile_icon = IconWidget(FluentIcon.PEOPLE, profile_header)
+        profile_icon.setFixedSize(14, 14)
+        profile_header_layout.addWidget(profile_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        profile_title = BodyLabel('个人信息', profile_header)
+        profile_title.setStyleSheet('font-weight: 700; font-size: 14px; color: #1e293b;')
+        profile_header_layout.addWidget(profile_title, 0, Qt.AlignmentFlag.AlignVCenter)
+        profile_header_layout.addStretch(1)
+        profile_layout.addWidget(profile_header)
+
+        profile_divider = QFrame(self._profile_card)
+        profile_divider.setObjectName('landProfileCardDivider')
+        profile_divider.setFixedHeight(1)
+        profile_divider.setStyleSheet(
+            'QFrame#landProfileCardDivider { background-color: rgba(37, 99, 235, 0.10); border: none; }'
+        )
+        profile_layout.addWidget(profile_divider)
+
+        profile_grid = QGridLayout()
+        profile_grid.setContentsMargins(0, 2, 0, 0)
+        profile_grid.setHorizontalSpacing(8)
+        profile_grid.setVerticalSpacing(6)
+        profile_fields = [
+            ('level', '等级'),
+            ('gold', '金币'),
+            ('coupon', '点券'),
+            ('exp', '经验'),
+        ]
+        for idx, (field_key, field_title) in enumerate(profile_fields):
+            profile_grid.addWidget(self._build_profile_cell(field_key, field_title), 0, idx)
+            profile_grid.setColumnStretch(idx, 1)
+        profile_layout.addLayout(profile_grid)
+
+        self._board_card = StableElevatedCardWidget(self)
+        self._board_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        self._apply_card_style(self._board_card, 'landDetailCard')
+        content_layout.addWidget(self._board_card)
+        content_layout.addStretch()
+
+        board_layout = QVBoxLayout(self._board_card)
+        board_layout.setContentsMargins(12, 10, 12, 10)
+        board_layout.setSpacing(9)
+
+        card_header = QWidget(self._board_card)
+        card_header_layout = QHBoxLayout(card_header)
+        card_header_layout.setContentsMargins(0, 0, 0, 0)
+        card_header_layout.setSpacing(8)
+
+        title_icon = IconWidget(FluentIcon.LEAF, card_header)
+        title_icon.setFixedSize(14, 14)
+        card_header_layout.addWidget(title_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_title = BodyLabel('土地信息', card_header)
+        card_title.setStyleSheet('font-weight: 700; font-size: 14px; color: #1e293b;')
+        card_header_layout.addWidget(card_title, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_subtitle = CaptionLabel('管理 24 格地块状态，保存后写入当前实例配置。', card_header)
+        card_subtitle.setStyleSheet('color: #64748b;')
+        card_header_layout.addWidget(card_subtitle, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_header_layout.addStretch(1)
+        self._edit_btn = ToolButton(card_header)
+        self._edit_btn.setFixedSize(36, 30)
+        self._edit_btn.setIconSize(QSize(16, 16))
+        self._edit_btn.clicked.connect(self._on_toggle_edit)
+        card_header_layout.addWidget(self._edit_btn, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        board_layout.addWidget(card_header)
+
+        divider = QFrame(self._board_card)
+        divider.setObjectName('landDetailCardDivider')
+        divider.setFixedHeight(1)
+        divider.setStyleSheet(
+            'QFrame#landDetailCardDivider { background-color: rgba(37, 99, 235, 0.10); border: none; }'
+        )
+        board_layout.addWidget(divider)
+
+        self._grid = QGridLayout()
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        self._grid.setHorizontalSpacing(self.CELL_GAP)
+        self._grid.setVerticalSpacing(self.CELL_GAP)
+
+        for row in range(self.ROW_COUNT):
+            for col in range(self.COL_COUNT):
+                plot_id = self._plot_id_at(row, col)
+                cell = LandCell(plot_id, self._board_card)
+                cell.state_changed.connect(self._on_cell_state_changed)
+                self._grid.addWidget(cell, row, col)
+                self._cells[plot_id] = cell
+
+        for col in range(self.COL_COUNT):
+            self._grid.setColumnStretch(col, 1)
+
+        board_layout.addLayout(self._grid)
+
+    @staticmethod
+    def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:
+        card.setObjectName(object_name)
+        card.setStyleSheet(
+            f'ElevatedCardWidget#{object_name} {{'
+            ' border-radius: 10px;'
+            ' border: 1px solid rgba(100, 116, 139, 0.22);'
+            ' }'
+            f'ElevatedCardWidget#{object_name}:hover {{'
+            ' background-color: rgba(37, 99, 235, 0.06);'
+            ' border: 1px solid rgba(59, 130, 246, 0.32);'
+            ' }'
+        )
+
+    def _build_profile_cell(self, field_key: str, field_title: str) -> QWidget:
+        row_widget = QWidget(self._profile_card)
+        row_widget.setObjectName('profileItem')
+        row_widget.setStyleSheet('QWidget#profileItem { border: none; border-radius: 6px; background: transparent; }')
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(6, 2, 6, 2)
+        row_layout.setSpacing(6)
+
+        title_label = CaptionLabel(f'{field_title}:', row_widget)
+        title_label.setTextColor(QColor('#64748B'), QColor('#94A3B8'))
+        row_layout.addWidget(title_label)
+
+        value_label = StrongBodyLabel('--', row_widget)
+        value_label.setTextColor(QColor('#0F172A'), QColor('#E5E7EB'))
+        if field_key in {'level', 'coupon'}:
+            value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            value_label.setMinimumWidth(value_label.fontMetrics().horizontalAdvance('00000'))
+        self._profile_value_labels[field_key] = value_label
+        row_layout.addWidget(value_label)
+        row_layout.addStretch()
+        return row_widget
+
+    def _set_edit_mode(self, editable: bool) -> None:
+        self._editing = bool(editable)
+        self._edit_btn.setIcon(
+            FluentIcon.SAVE.icon(color=QColor('#ffffff'))
+            if self._editing
+            else FluentIcon.EDIT.icon(color=QColor('#ffffff'))
+        )
+        self._edit_btn.setToolTip('保存' if self._editing else '编辑')
+        if self._editing:
+            self._edit_btn.setStyleSheet(
+                'QToolButton {'
+                ' background-color: #16a34a;'
+                ' border: 1px solid #15803d;'
+                ' border-radius: 8px;'
+                ' padding: 0;'
+                '}'
+                'QToolButton:hover {'
+                ' background-color: #15803d;'
+                ' border-color: #166534;'
+                '}'
+                'QToolButton:pressed {'
+                ' background-color: #166534;'
+                ' border-color: #14532d;'
+                '}'
+            )
+        else:
+            self._edit_btn.setStyleSheet(
+                'QToolButton {'
+                ' background-color: #2563eb;'
+                ' border: 1px solid #1d4ed8;'
+                ' border-radius: 8px;'
+                ' padding: 0;'
+                '}'
+                'QToolButton:hover {'
+                ' background-color: #1d4ed8;'
+                ' border-color: #1e40af;'
+                '}'
+                'QToolButton:pressed {'
+                ' background-color: #1e40af;'
+                ' border-color: #1e3a8a;'
+                '}'
+            )
+        for cell in self._cells.values():
+            cell.set_editable(self._editing)
+
+    @staticmethod
+    def _plot_logic_key(plot_id: str) -> tuple[int, int]:
+        # 逻辑排序：1-1 1-2 1-3 1-4 2-1 ...
+        left, _, right = str(plot_id or '').partition('-')
+        try:
+            return int(left), int(right)
+        except Exception:
+            return 999, 999
+
+    def _on_cell_state_changed(self, plot_id: str, state: str) -> None:
+        """编辑状态下：将当前地块之前且等级更低的地块级联提升到相同状态。"""
+        if not self._editing:
+            return
+        target_key = self._plot_logic_key(plot_id)
+        target_rank = int(LAND_STATE_RANK.get(str(state), 0))
+
+        for cell in self._cells.values():
+            if self._plot_logic_key(cell.plot_id) >= target_key:
+                continue
+            prev_state = str(cell.get_data().get('level', 'unbuilt'))
+            prev_rank = int(LAND_STATE_RANK.get(prev_state, 0))
+            if prev_rank >= target_rank:
+                continue
+            cell.set_data({'level': state})
+        ok, message = self._validate_adjacent_continuity()
+        if not ok:
+            self._show_tip('编辑提示', message)
+
+    def _validate_before_save(self) -> tuple[bool, str]:
+        ordered = sorted(self._cells.values(), key=lambda c: self._plot_logic_key(c.plot_id))
+        prev_cell: LandCell | None = None
+        prev_rank = -1
+        for cell in ordered:
+            state = str(cell.get_data().get('level', 'unbuilt'))
+            rank = int(LAND_STATE_RANK.get(state, 0))
+            if prev_cell is not None and prev_rank < rank:
+                prev_state = str(prev_cell.get_data().get('level', 'unbuilt'))
+                prev_label = LAND_STATE_META.get(prev_state, LAND_STATE_META['unbuilt']).label
+                curr_label = LAND_STATE_META.get(state, LAND_STATE_META['unbuilt']).label
+                return (
+                    False,
+                    f'排序不合法：{prev_cell.plot_id}({prev_label}) < {cell.plot_id}({curr_label})\n'
+                    '请保证前面的地块等级不低于后面的地块。',
+                )
+            prev_cell = cell
+            prev_rank = rank
+        return self._validate_adjacent_continuity()
+
+    def _validate_adjacent_continuity(self) -> tuple[bool, str]:
+        """校验相邻地块等级连续（仅可相同或下降一级）。"""
+        ordered = sorted(self._cells.values(), key=lambda c: self._plot_logic_key(c.plot_id))
+        prev_cell: LandCell | None = None
+        prev_rank = -1
+        for cell in ordered:
+            state = str(cell.get_data().get('level', 'unbuilt'))
+            rank = int(LAND_STATE_RANK.get(state, 0))
+            if prev_cell is not None and prev_rank - rank > 1:
+                prev_state = str(prev_cell.get_data().get('level', 'unbuilt'))
+                prev_label = LAND_STATE_META.get(prev_state, LAND_STATE_META['unbuilt']).label
+                curr_label = LAND_STATE_META.get(state, LAND_STATE_META['unbuilt']).label
+                return (
+                    False,
+                    f'等级不连续：{prev_cell.plot_id}({prev_label}) 与 {cell.plot_id}({curr_label}) 不是相邻等级\n'
+                    '请保证相邻地块状态仅可相同或下降一级。',
+                )
+            prev_cell = cell
+            prev_rank = rank
+        return True, ''
+
+    def _show_save_error(self, message: str) -> None:
+        box = MessageBox('保存失败', str(message or '').strip(), self._dialog_parent())
+        box.yesButton.setText('确定')
+        box.cancelButton.hide()
+        box.exec()
+
+    def _show_tip(self, title: str, message: str) -> None:
+        box = MessageBox(str(title or '').strip() or '提示', str(message or '').strip(), self._dialog_parent())
+        box.yesButton.setText('确定')
+        box.cancelButton.hide()
+        box.exec()
+
+    def _dialog_parent(self) -> QWidget:
+        parent_window = self.window()
+        return parent_window if isinstance(parent_window, QWidget) else self
+
+    def _save_to_config(self) -> bool:
+        try:
+            self.config.land.plots = self.get_land_data()
+            self.config.save()
+        except Exception as exc:
+            self._show_save_error(f'写入配置失败：{exc}')
+            return False
+        self.config_changed.emit(self.config)
+        return True
+
+    def _load_from_config(self) -> None:
+        profile_cfg = getattr(getattr(self.config, 'land', None), 'profile', None)
+        if profile_cfg is None:
+            profile_level_text = '--'
+            profile_gold_text = '--'
+            profile_coupon_text = '--'
+            profile_exp_text = '--'
+        else:
+            level_value = int(getattr(profile_cfg, 'level', 0))
+            if level_value <= 0:
+                level_value = int(getattr(getattr(self.config, 'planting', None), 'player_level', 0))
+            profile_level_text = str(level_value) if level_value > 0 else '--'
+            profile_gold_text = str(getattr(profile_cfg, 'gold', '') or '').strip() or '--'
+            profile_coupon_text = str(getattr(profile_cfg, 'coupon', '') or '').strip() or '--'
+            profile_exp_text = str(getattr(profile_cfg, 'exp', '') or '').strip() or '--'
+
+        value_map = {
+            'level': profile_level_text,
+            'gold': profile_gold_text,
+            'coupon': profile_coupon_text,
+            'exp': profile_exp_text,
+        }
+        for key, label in self._profile_value_labels.items():
+            label.setText(value_map.get(key, '--'))
+
+        items = getattr(getattr(self.config, 'land', None), 'plots', [])
+        if not isinstance(items, list):
+            items = []
+        self.set_land_data(items)
+
+    def _on_toggle_edit(self) -> None:
+        if self._editing:
+            ok, message = self._validate_before_save()
+            if not ok:
+                self._show_save_error(message)
+                return
+            if not self._save_to_config():
+                return
+        self._set_edit_mode(not self._editing)
+
+    def set_land_data(self, items: list[dict[str, object]]) -> None:
+        """按 `plot_id` 批量设置地块数据。"""
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            plot_id = str(item.get('plot_id', '')).strip()
+            cell = self._cells.get(plot_id)
+            if cell is None:
+                continue
+            cell.set_data(item)
+
+    def get_land_data(self) -> list[dict[str, object]]:
+        """读取当前全部地块数据。"""
+        return [self._cells[plot_id].get_data() for plot_id in self._plot_ids_visual_order() if plot_id in self._cells]
+
+    def set_config(self, config: AppConfig) -> None:
+        self.config = config
+        self._set_edit_mode(False)
+        self._load_from_config()
+
+    def _refresh_on_open(self) -> None:
+        """每次打开标签页时，从磁盘配置刷新当前展示。"""
+        cfg_path = str(getattr(self.config, '_config_path', '') or '').strip()
+        if cfg_path:
+            try:
+                self.config = AppConfig.load(cfg_path)
+            except Exception:
+                pass
+        self._load_from_config()
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self._refresh_on_open()
