@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping
 
+from loguru import logger
+
 from core.engine.task.registry import TaskResult
 
 if TYPE_CHECKING:
@@ -77,6 +79,127 @@ class TaskBase:
         if not key:
             return []
         return [item for item in self.parse_land_detail_plots() if self.parse_truthy(item.get(key, default))]
+
+    def collect_land_targets_by_flag(
+        self,
+        flag: str,
+        *,
+        anchor_threshold: float = 0.95,
+        log_prefix: str = '土地流程',
+    ) -> list[tuple[str, tuple[int, int]]]:
+        """按土地详情标记收集地块坐标。"""
+        pending_entries = self.parse_land_detail_plots_by_flag(flag)
+        if not pending_entries:
+            return []
+
+        from core.ui.assets import BTN_LAND_LEFT, BTN_LAND_RIGHT
+        from utils.land_grid import get_lands_from_land_anchor
+
+        self.ui.device.screenshot()
+        land_right_anchor = self.ui.appear_location(
+            BTN_LAND_RIGHT,
+            offset=30,
+            threshold=float(anchor_threshold),
+            static=False,
+        )
+        land_left_anchor = self.ui.appear_location(
+            BTN_LAND_LEFT,
+            offset=30,
+            threshold=float(anchor_threshold),
+            static=False,
+        )
+        if land_right_anchor is None and land_left_anchor is None:
+            logger.warning('{}: 未识别到地块锚点，跳过本轮', log_prefix)
+            return []
+
+        all_lands = get_lands_from_land_anchor(
+            (int(land_right_anchor[0]), int(land_right_anchor[1])) if land_right_anchor is not None else None,
+            (int(land_left_anchor[0]), int(land_left_anchor[1])) if land_left_anchor is not None else None,
+        )
+        if not all_lands:
+            logger.warning('{}: 未生成地块网格，跳过本轮', log_prefix)
+            return []
+
+        center_by_plot_id = {str(cell.label): (int(cell.center[0]), int(cell.center[1])) for cell in all_lands}
+        center_by_order = {int(cell.order): (int(cell.center[0]), int(cell.center[1])) for cell in all_lands}
+
+        targets: list[tuple[str, tuple[int, int]]] = []
+        missing_refs: list[str] = []
+        for item in pending_entries:
+            plot_id = str(item.get('plot_id', '') or '').strip()
+            if plot_id and plot_id in center_by_plot_id:
+                targets.append((plot_id, center_by_plot_id[plot_id]))
+                continue
+
+            try:
+                order = int(item.get('order', 0))
+            except Exception:
+                order = 0
+            if order <= 0:
+                try:
+                    order = int(item.get('source_index', 0))
+                except Exception:
+                    order = 0
+            point = center_by_order.get(order)
+            if point is None:
+                missing_refs.append(plot_id or f'order:{order}')
+                continue
+            targets.append((plot_id or f'order:{order}', point))
+
+        target_refs = [ref for ref, _ in targets]
+        logger.info('{}: 地块序号={}', log_prefix, target_refs)
+        if missing_refs:
+            logger.warning('{}: 未映射地块={}', log_prefix, missing_refs)
+        return targets
+
+    def backfill_land_flag_false(
+        self,
+        plot_refs: list[str],
+        flag: str,
+        *,
+        log_prefix: str = '土地流程',
+    ) -> None:
+        """按地块序号回填土地标记为 `false`。"""
+        key = str(flag or '').strip()
+        if not key:
+            return
+
+        plot_ids = {str(ref).strip() for ref in plot_refs if '-' in str(ref)}
+        if not plot_ids:
+            return
+
+        plots = getattr(getattr(self.engine.config, 'land', None), 'plots', None)
+        if not isinstance(plots, list):
+            return
+
+        changed_plot_ids: list[str] = []
+        for item in plots:
+            if not isinstance(item, dict):
+                continue
+            plot_id = str(item.get('plot_id', '') or '').strip()
+            if plot_id not in plot_ids:
+                continue
+            if not self.parse_truthy(item.get(key, False)):
+                continue
+            item[key] = False
+            changed_plot_ids.append(plot_id)
+
+        if not changed_plot_ids:
+            return
+
+        try:
+            self.engine.config.save()
+        except Exception as exc:
+            logger.warning('{}: 状态回填失败 | flag={} error={}', log_prefix, key, exc)
+            return
+
+        emit_now = getattr(self.engine, '_emit_config_now', None)
+        if callable(emit_now):
+            try:
+                emit_now()
+            except Exception:
+                pass
+        logger.info('{}: 状态回填完成 | flag={} plots={}', log_prefix, key, sorted(changed_plot_ids))
 
     @staticmethod
     def ok(*, next_run_seconds: int | None = None) -> TaskResult:

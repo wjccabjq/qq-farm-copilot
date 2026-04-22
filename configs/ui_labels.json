@@ -31,7 +31,9 @@
     },
     "feature_hints": {
       "reward.claim_growth_task": "QQ平台会直接领取",
-      "friend.steal_stats": "开启后偷取会变慢"
+      "friend.steal_stats": "开启后偷取会变慢",
+      "main.auto_upgrade": "需要开启土地巡查任务",
+      "main.auto_fertilize": "需要开启土地巡查任务"
     },
     "enabled": "启用",
     "detail_text": "详情",
