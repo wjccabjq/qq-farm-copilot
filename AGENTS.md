@@ -50,7 +50,7 @@
 : 任务注册与调度桥接（自动发现 `_run_task_*`）。
 
 - `core/engine/task/executor.py`
-: 通用任务执行器（pending/waiting 队列、优先级排序、结果回写 next_run）。
+: 通用任务执行器（pending/waiting 队列、按固定任务顺序调度、结果回写 next_run）。
 
 - `tasks/*.py`
 : 业务任务实现（`main/friend/share/reward/gift/sell/land_scan` 及子任务）。
@@ -68,8 +68,8 @@
 ### 2.2 排序规则
 
 - 仅执行 `enabled=true` 且 `next_run <= now` 的任务。
-- `pending` 队列按 `priority` 升序排序（值越小优先级越高）。
-- 同一时刻到期任务按 `priority` 串行执行，不并发。
+- `pending` 队列按 `config.executor.task_order`（`>` 分隔）从左到右排序。
+- 同一时刻到期任务按 `task_order` 串行执行，不并发。
 
 ### 2.3 触发类型
 
@@ -151,7 +151,7 @@
 : 推迟任务下一次执行。
 
 - `update_task(name, **kwargs)`
-: 热更新任务参数（enabled/priority/interval 等）。
+: 热更新任务参数（enabled/interval/trigger/next_run 等）。
 
 ## 4. 业务任务逻辑（当前实现）
 
@@ -195,10 +195,11 @@
 
 ## 6. 配置字段约定（tasks）
 
+- `executor.task_order: "task_a>task_b>task_c"`（固定任务顺序，`>` 分隔）
+
 每个任务项建议包含：
 
 - `enabled: bool`
-- `priority: int`（>=1）
 - `trigger: "interval" | "daily"`
 - `interval_seconds: int`（>=1，实际生效下限见 `executor.min_task_interval_seconds`）
 - `enabled_time_range: "HH:MM:SS-HH:MM:SS"`（默认 `00:00:00-23:59:59`，仅 `trigger=interval` 生效）
@@ -230,7 +231,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 : 检查 `window_title_keyword`、`window_select_rule`、窗口平台（QQ/微信）、模板是否与平台匹配。
 
 - 任务未执行
-: 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds/enabled_time_range`、`priority`。
+: 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds/enabled_time_range`、`executor.task_order`。
 
 - 修改文案后界面未更新
 : UI 文案读取 `configs/ui_labels.json`（内置配置）；修改后需重启程序，运行中不会热重建已创建面板。

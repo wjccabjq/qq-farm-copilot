@@ -22,7 +22,7 @@ TaskErrorHook = Callable[[str, Exception, str], None]
 
 
 class TaskExecutor:
-    """通用任务执行器：维护任务队列并在后台线程中按优先级调度。"""
+    """通用任务执行器：维护任务队列并按固定顺序索引调度。"""
 
     def __init__(
         self,
@@ -168,8 +168,8 @@ class TaskExecutor:
                 pending.append(task)
             else:
                 waiting.append(task)
-        # 对齐 NIKKE：待执行队列优先看任务优先级。
-        pending.sort(key=lambda t: t.priority)
+        # 待执行队列按固定顺序索引排序（来自 executor.task_order）。
+        pending.sort(key=lambda t: t.order_index)
         waiting.sort(key=lambda t: t.next_run)
         return TaskSnapshot(
             running_task=self._running_task,
@@ -183,7 +183,7 @@ class TaskExecutor:
         return TaskItem(
             name=item.name,
             enabled=item.enabled,
-            priority=item.priority,
+            order_index=item.order_index,
             next_run=item.next_run,
             success_interval=item.success_interval,
             failure_interval=item.failure_interval,

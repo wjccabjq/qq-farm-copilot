@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from PyQt6.QtCore import QDateTime, QTime, Qt, pyqtSignal
+from PyQt6.QtCore import QDateTime, Qt, QTime, pyqtSignal
 from PyQt6.QtWidgets import (
     QDateTimeEdit,
     QFormLayout,
@@ -34,6 +34,7 @@ from models.config import (
     AppConfig,
     TaskTriggerType,
     normalize_task_enabled_time_range,
+    parse_executor_task_order,
     resolve_task_min_interval_seconds,
 )
 from utils.app_paths import load_config_json_object
@@ -86,7 +87,7 @@ class TaskPanel(QWidget):
         waterfall.addLayout(right_col, 1)
         columns = [left_col, right_col]
         col_heights = [0, 0]
-        self._task_order = [str(name) for name in getattr(self.config, 'tasks', {}).keys()]
+        self._task_order = self._resolve_task_order()
 
         for task_name in self._task_order:
             task_cfg = self.config.tasks.get(task_name)
@@ -106,6 +107,35 @@ class TaskPanel(QWidget):
             col.addStretch()
         content_layout.addLayout(waterfall)
         content_layout.addStretch()
+
+    def _resolve_task_order(self) -> list[str]:
+        tasks_cfg = getattr(self.config, 'tasks', None)
+        if isinstance(tasks_cfg, dict):
+            task_names = [str(name) for name in tasks_cfg.keys()]
+        elif tasks_cfg is None:
+            task_names = []
+        else:
+            try:
+                task_names = [str(name) for name in tasks_cfg.model_dump().keys()]
+            except Exception:
+                task_names = []
+
+        known = set(task_names)
+        out: list[str] = []
+        seen: set[str] = set()
+        for name in parse_executor_task_order(getattr(self.config.executor, 'task_order', '')):
+            task_name = str(name)
+            if not task_name or task_name in seen or task_name not in known:
+                continue
+            seen.add(task_name)
+            out.append(task_name)
+        for name in task_names:
+            task_name = str(name)
+            if not task_name or task_name in seen:
+                continue
+            seen.add(task_name)
+            out.append(task_name)
+        return out
 
     @staticmethod
     def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:
@@ -394,5 +424,6 @@ class TaskPanel(QWidget):
     def set_config(self, config: AppConfig) -> None:
         self.config = config
         self._loading = True
+        self._task_order = self._resolve_task_order()
         self._load_config()
         self._loading = False

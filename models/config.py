@@ -119,6 +119,7 @@ class TaskTriggerType(str, Enum):
 DEFAULT_MIN_TASK_INTERVAL_SECONDS = 5
 DEFAULT_TASK_NEXT_RUN = '2026-01-01 00:00'
 DEFAULT_TASK_ENABLED_TIME_RANGE = '00:00:00-23:59:59'
+DEFAULT_EXECUTOR_TASK_ORDER = 'land_scan>main>friend>sell>reward>gift>share'
 
 
 def _normalize_hh_mm_text(text: str, fallback: str) -> str:
@@ -168,11 +169,34 @@ def resolve_task_min_interval_seconds(executor_cfg) -> int:
     return max(1, value)
 
 
+def normalize_executor_task_order(value: Any) -> str:
+    """规范化任务顺序配置为 `task_a>task_b>task_c`。"""
+    raw = str(value or DEFAULT_EXECUTOR_TASK_ORDER).strip()
+    if not raw:
+        raw = DEFAULT_EXECUTOR_TASK_ORDER
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw.split('>'):
+        name = str(item or '').strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    if not out:
+        return DEFAULT_EXECUTOR_TASK_ORDER
+    return '>'.join(out)
+
+
+def parse_executor_task_order(value: Any) -> list[str]:
+    """解析任务顺序配置文本。"""
+    normalized = normalize_executor_task_order(value)
+    return [item for item in normalized.split('>') if item]
+
+
 class TaskScheduleItemConfig(BaseModel):
     """定义 `TaskScheduleItemConfig` 的配置数据结构与默认值。"""
 
     enabled: bool = True
-    priority: int = 10
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
     enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
@@ -180,12 +204,6 @@ class TaskScheduleItemConfig(BaseModel):
     next_run: str = DEFAULT_TASK_NEXT_RUN
     failure_interval_seconds: int = 60
     features: dict[str, Any] = Field(default_factory=dict)
-
-    @field_validator('priority', mode='before')
-    @classmethod
-    def _normalize_priority(cls, value):
-        """规范化 `priority` 输入值。"""
-        return max(1, int(value))
 
     @field_validator('interval_seconds', mode='before')
     @classmethod
@@ -256,6 +274,7 @@ class ExecutorConfig(BaseModel):
 
     min_task_interval_seconds: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
     empty_queue_policy: str = 'stay'
+    task_order: str = DEFAULT_EXECUTOR_TASK_ORDER
     default_success_interval: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
     default_failure_interval: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
     max_failures: int = 3
@@ -268,6 +287,12 @@ class ExecutorConfig(BaseModel):
         if text not in {'stay', 'goto_main'}:
             return 'stay'
         return text
+
+    @field_validator('task_order', mode='before')
+    @classmethod
+    def _normalize_task_order(cls, value):
+        """规范化执行器任务顺序配置。"""
+        return normalize_executor_task_order(value)
 
     @field_validator('min_task_interval_seconds', mode='before')
     @classmethod

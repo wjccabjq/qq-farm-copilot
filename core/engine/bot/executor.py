@@ -23,6 +23,7 @@ from models.config import (
     DEFAULT_TASK_ENABLED_TIME_RANGE,
     TaskTriggerType,
     normalize_task_enabled_time_range,
+    parse_executor_task_order,
     resolve_task_min_interval_seconds,
 )
 from tasks.friend import TaskFriend
@@ -115,6 +116,40 @@ class BotExecutorMixin:
         except Exception:
             return []
 
+    def _ordered_task_names(self, runners: dict[str, Callable[[TaskContext], TaskResult]] | None = None) -> list[str]:
+        """按 `executor.task_order` + 配置声明顺序产出任务名列表。"""
+        ordered = parse_executor_task_order(getattr(self.config.executor, 'task_order', ''))
+        known_names: set[str] = set(self._iter_task_config_names())
+        if runners:
+            known_names.update(str(name) for name in runners.keys())
+
+        out: list[str] = []
+        seen: set[str] = set()
+
+        for name in ordered:
+            task_name = str(name)
+            if not task_name or task_name in seen or task_name not in known_names:
+                continue
+            seen.add(task_name)
+            out.append(task_name)
+
+        for name in self._iter_task_config_names():
+            task_name = str(name)
+            if not task_name or task_name in seen:
+                continue
+            seen.add(task_name)
+            out.append(task_name)
+
+        if runners:
+            for name in sorted(runners.keys()):
+                task_name = str(name)
+                if not task_name or task_name in seen:
+                    continue
+                seen.add(task_name)
+                out.append(task_name)
+
+        return out
+
     @classmethod
     def _parse_task_next_run_text(cls, text: str | None) -> datetime | None:
         """解析配置中的 `next_run` 文本。"""
@@ -177,10 +212,7 @@ class BotExecutorMixin:
         default_failure = max(min_interval, int(self.config.executor.default_failure_interval))
         max_failures = max(1, int(self.config.executor.max_failures))
 
-        task_names = self._iter_task_config_names()
-        for name in sorted(runners.keys()):
-            if name not in task_names:
-                task_names.append(name)
+        task_names = self._ordered_task_names(runners)
 
         out: dict[str, TaskItem] = {}
         for index, task_name in enumerate(task_names, start=1):
@@ -189,7 +221,7 @@ class BotExecutorMixin:
             enabled = bool(has_runner) if cfg is None else bool(cfg.enabled and has_runner)
             if cfg is None and has_runner:
                 logger.info(f'任务 `{task_name}` 未在配置中声明，使用执行器默认调度参数')
-            priority = int(getattr(cfg, 'priority', index * 10))
+            order_index = index
 
             success_interval = max(
                 min_interval,
@@ -213,7 +245,7 @@ class BotExecutorMixin:
             out[task_name] = TaskItem(
                 name=task_name,
                 enabled=enabled,
-                priority=priority,
+                order_index=order_index,
                 next_run=next_run,
                 success_interval=success_interval,
                 failure_interval=failure_interval,
@@ -345,14 +377,33 @@ class BotExecutorMixin:
             # 执行器已启动：直接热更新运行中的任务参数。
             self._task_executor.set_empty_queue_policy(self.config.executor.empty_queue_policy)
 
-        task_names = list(self._executor_tasks.keys())
+        task_names = self._ordered_task_names(runners)
+        for task_name in task_names:
+            if task_name in self._executor_tasks:
+                continue
+            self._executor_tasks[task_name] = TaskItem(
+                name=task_name,
+                enabled=False,
+                order_index=max(1, len(self._executor_tasks) + 1),
+                next_run=now,
+                success_interval=default_success,
+                failure_interval=default_failure,
+                trigger=TaskTriggerType.INTERVAL.value,
+                enabled_time_range=DEFAULT_TASK_ENABLED_TIME_RANGE,
+                max_failures=max_failures,
+            )
+
+        stale_names = [name for name in list(self._executor_tasks.keys()) if name not in task_names]
+        for stale_name in stale_names:
+            self._executor_tasks.pop(stale_name, None)
+
         for index, task_name in enumerate(task_names, start=1):
             cfg = self._get_task_cfg(task_name)
             item = self._executor_tasks.get(task_name)
             has_runner = task_name in runners
 
             enabled = bool(has_runner) if cfg is None else bool(cfg.enabled and has_runner)
-            priority = int(getattr(cfg, 'priority', index * 10))
+            order_index = index
             success_interval = max(
                 min_interval,
                 int(getattr(cfg, 'interval_seconds', default_success)),
@@ -365,7 +416,7 @@ class BotExecutorMixin:
             trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
             kwargs = {
                 'enabled': enabled,
-                'priority': priority,
+                'order_index': order_index,
                 'success_interval': success_interval,
                 'failure_interval': failure_interval,
                 'trigger': trigger_text,
@@ -385,7 +436,7 @@ class BotExecutorMixin:
                 self._task_executor.update_task(task_name, **kwargs)
             elif item:
                 item.enabled = bool(kwargs['enabled'])
-                item.priority = int(kwargs['priority'])
+                item.order_index = int(kwargs['order_index'])
                 item.success_interval = int(kwargs['success_interval'])
                 item.failure_interval = int(kwargs['failure_interval'])
                 item.trigger = str(kwargs['trigger'])
