@@ -20,6 +20,7 @@ from qfluentwidgets import (
     ScrollArea,
     SettingCard,
     SettingCardGroup,
+    SpinBox,
     SwitchSettingCard,
 )
 
@@ -34,7 +35,13 @@ from utils.app_paths import (
     set_user_app_dir_override,
     user_app_dir,
 )
-from utils.logger import switch_log_directory
+from utils.logger import (
+    DEFAULT_LOG_RETENTION_DAYS,
+    MAX_LOG_RETENTION_DAYS,
+    MIN_LOG_RETENTION_DAYS,
+    normalize_log_retention_days,
+    switch_log_directory,
+)
 
 PROJECT_URL = 'https://github.com/megumiss/qq-farm-copilot'
 LICENSE_URL = f'{PROJECT_URL}/blob/main/LICENSE'
@@ -78,10 +85,42 @@ class _LocalOptionsSettingCard(OptionsSettingCard):
         return self._current_value
 
 
+class _LogRetentionSettingCard(SettingCard):
+    """日志保留天数设置卡。"""
+
+    value_changed = pyqtSignal(int)
+
+    def __init__(self, icon, title, content=None, *, minimum: int = 1, maximum: int = 365, parent=None):
+        super().__init__(icon, title, content, parent)
+        self._minimum = int(minimum)
+        self._maximum = int(maximum)
+        self.spin_box = SpinBox(self)
+        self.spin_box.setRange(self._minimum, self._maximum)
+        self.spin_box.setSingleStep(1)
+        self.spin_box.setSuffix(' 天')
+        self.spin_box.setFixedWidth(132)
+        self.hBoxLayout.addWidget(self.spin_box, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+        self.spin_box.valueChanged.connect(self._on_value_changed)
+
+    def _on_value_changed(self, value: int) -> None:
+        self.value_changed.emit(int(value))
+
+    def set_value(self, value: int) -> None:
+        normalized = normalize_log_retention_days(value, default=self._minimum)
+        normalized = max(self._minimum, min(self._maximum, normalized))
+        blocked = self.spin_box.blockSignals(True)
+        self.spin_box.setValue(normalized)
+        self.spin_box.blockSignals(blocked)
+
+    def value(self) -> int:
+        return int(self.spin_box.value())
+
+
 class GlobalSettingsPanel(QWidget):
     """应用级设置（主题/窗口效果）。"""
 
-    apply_requested = pyqtSignal(str, bool)
+    apply_requested = pyqtSignal(str, bool, int)
     check_update_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -130,9 +169,18 @@ class GlobalSettingsPanel(QWidget):
             '开启后使用窗口材质效果',
             parent=self.settings_group,
         )
-        self.settings_group.addSettingCards([self.theme_card, self.mica_card])
+        self.log_retention_card = _LogRetentionSettingCard(
+            FluentIcon.DOCUMENT,
+            '日志保留时间',
+            '按天保留，超过时会自动清理 .log 文件',
+            minimum=MIN_LOG_RETENTION_DAYS,
+            maximum=MAX_LOG_RETENTION_DAYS,
+            parent=self.settings_group,
+        )
+        self.settings_group.addSettingCards([self.theme_card, self.mica_card, self.log_retention_card])
         self.theme_card.optionChanged.connect(lambda *_: self._emit_apply())
         self.mica_card.checkedChanged.connect(lambda *_: self._emit_apply())
+        self.log_retention_card.value_changed.connect(lambda *_: self._emit_apply())
         self.settings_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         body.addWidget(self.settings_group)
 
@@ -231,15 +279,22 @@ class GlobalSettingsPanel(QWidget):
     def _emit_apply(self) -> None:
         if self._loading:
             return
-        self.apply_requested.emit(str(self.theme_card.currentValue() or 'auto'), bool(self.mica_card.isChecked()))
+        self.apply_requested.emit(
+            str(self.theme_card.currentValue() or 'auto'),
+            bool(self.mica_card.isChecked()),
+            int(self.log_retention_card.value()),
+        )
 
-    def set_values(self, theme_mode: str, mica_enabled: bool) -> None:
+    def set_values(
+        self, theme_mode: str, mica_enabled: bool, log_retention_days: int = DEFAULT_LOG_RETENTION_DAYS
+    ) -> None:
         self._loading = True
         value = str(theme_mode or 'auto')
         if value not in {'auto', 'light', 'dark'}:
             value = 'auto'
         self.theme_card.setValue(value)
         self.mica_card.setChecked(bool(mica_enabled))
+        self.log_retention_card.set_value(normalize_log_retention_days(log_retention_days))
         self._loading = False
 
     def set_version_text(self, current_version: str, detail: str = '') -> None:
@@ -328,7 +383,10 @@ class GlobalSettingsPanel(QWidget):
 
         if result.changed:
             try:
-                switch_log_directory(str((result.target_dir / 'logs').resolve()))
+                switch_log_directory(
+                    str((result.target_dir / 'logs').resolve()),
+                    retention_days=self.log_retention_card.value(),
+                )
             except Exception:
                 # 日志切换失败不阻断目录切换与重启。
                 pass

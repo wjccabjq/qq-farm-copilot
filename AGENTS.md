@@ -25,6 +25,7 @@
 - 好友黑名单配置：`config.tasks.friend.features.blacklist`（`list[str]`，在任务设置详情弹窗维护）
 - 偷取统计开关：`config.tasks.friend.features.steal_stats`（默认 `false`；开启后仅在偷取动作后执行 OCR 统计，偷取速度会变慢）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
+- 全局日志保留：`%APPDATA%/QQFarmCopilot/app_settings.json -> logging.retention_days`（单位天，默认 `7`；启动与全局设置变更时清理过期 `.log`）
 - 截图频率：`config.screenshot.capture_interval_seconds`（默认 `0.3` 秒；`0` 表示不限制最小截图间隔）
 - 播种稳定超时：`config.planting.planting_stable_timeout_seconds`（默认 `3.0` 秒；用于背景树锚点稳定等待超时）
 - 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `BgPatchNumberOCR` 在区域 `x:[50,480], y:[地块点击y+40, 地块点击y+80]` 识别最左数字块

@@ -413,6 +413,16 @@ class BotEngine(QObject):
         if self._worker and self._worker.is_alive():
             self._send_command('update_config', data=self.config.model_dump(), wait=False)
 
+    def apply_log_retention_days(self, retention_days: int) -> None:
+        """更新 worker 日志保留天数。"""
+        try:
+            days = max(1, int(retention_days))
+        except Exception:
+            days = 7
+        self.runtime_paths['log_retention_days'] = str(days)
+        if self._worker and self._worker.is_alive():
+            self._send_command('apply_log_retention', data={'days': days}, wait=False)
+
     def __del__(self):
         try:
             self._allow_idle_prewarm = False

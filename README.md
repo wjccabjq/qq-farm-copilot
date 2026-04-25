@@ -43,6 +43,7 @@
 - 架构：`BotEngine` + `TaskExecutor` + UI 页面识别（`core/ui`）
 - 调度：统一任务执行器，支持 `INTERVAL` / `DAILY`
 - 实例配置：`%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json` 中 `tasks` 为**动态字典**
+- 全局设置：`%APPDATA%\QQFarmCopilot\app_settings.json` 支持 `logging.retention_days`（日志保留天数，单位天）
 - 任务顺序：`executor.task_order`（使用 `>` 分隔，越靠左越先执行）
 - UI：左侧实时截图、中间实例运行面板、最右侧竖向实例栏（新增/删除/切换/克隆/重命名）
 
@@ -127,6 +128,11 @@ python main.py
 实例主配置文件（按实例隔离）：
 
 - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
+
+应用级配置文件（全局）：
+
+- `%APPDATA%\QQFarmCopilot\app_settings.json`
+- `logging.retention_days`：日志保留天数（单位天，默认 `7`）；启动时与全局设置变更时会清理过期 `.log` 文件
 
 核心字段：
 
