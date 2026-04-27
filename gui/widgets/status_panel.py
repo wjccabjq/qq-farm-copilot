@@ -10,11 +10,12 @@ from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
-    ElevatedCardWidget,
     FluentIcon,
     IconWidget,
     StrongBodyLabel,
 )
+
+from gui.widgets.fluent_container import StableElevatedCardWidget
 
 
 class StatusPanel(QWidget):
@@ -66,8 +67,8 @@ class StatusPanel(QWidget):
         self._add_cell(stats_grid, 1, 2, '出售', 'sell', '0')
         root.addWidget(stats_card)
 
-    def _build_card(self, title: str, icon: FluentIcon) -> tuple[ElevatedCardWidget, QGridLayout]:
-        card = ElevatedCardWidget(self)
+    def _build_card(self, title: str, icon: FluentIcon) -> tuple[StableElevatedCardWidget, QGridLayout]:
+        card = StableElevatedCardWidget(self)
         card.setObjectName('statusCard')
         card.setStyleSheet(
             'ElevatedCardWidget#statusCard { border-radius: 10px; border: 1px solid rgba(100, 116, 139, 0.22); }'

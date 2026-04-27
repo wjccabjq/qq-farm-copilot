@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from PyQt6.QtCore import QSignalBlocker, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QShowEvent
 from PyQt6.QtWidgets import (
     QFrame,
+    QGraphicsDropShadowEffect,
     QGridLayout,
     QHBoxLayout,
     QSizePolicy,
@@ -98,6 +99,12 @@ class LandCell(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(96)
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(16.0)
+        shadow.setOffset(0.0, 2.0)
+        shadow.setColor(QColor(15, 23, 42, 60))
+        self.setGraphicsEffect(shadow)
+        self._shadow_effect = shadow
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
