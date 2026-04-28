@@ -474,6 +474,7 @@ class TaskFriend(TaskBase):
     def _run_feature_steal(self, *, enable_steal_stats: bool):
         """好友偷菜。"""
         if self._run_help_single_action(BTN_STEAL, ActionType.STEAL, '偷好友果实'):
+            self.engine._record_friend_daily_stat('steal')
             if enable_steal_stats:
                 self._ocr_and_record_steal()
 
@@ -707,6 +708,7 @@ class TaskFriend(TaskBase):
             if self.ui.appear_then_click_any(action_buttons, offset=30, interval=1, static=False):
                 if clicked_action is not None:
                     self.engine._record_stat(clicked_action)
+                    self.engine._record_friend_daily_stat('help')
                 confirm_timer.clear()
                 continue
 
