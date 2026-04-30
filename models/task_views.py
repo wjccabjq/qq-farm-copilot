@@ -96,6 +96,11 @@ class GiftTaskView(TaskViewBase):
 
 
 @dataclass(slots=True)
+class EventShopTaskView(TaskViewBase):
+    feature: EmptyFeatures = field(default_factory=EmptyFeatures)
+
+
+@dataclass(slots=True)
 class SellTaskView(TaskViewBase):
     feature: EmptyFeatures = field(default_factory=EmptyFeatures)
 
@@ -116,6 +121,7 @@ TASK_FEATURE_CLASS_MAP = {
     'share': EmptyFeatures,
     'reward': RewardFeatures,
     'gift': GiftFeatures,
+    'event_shop': EmptyFeatures,
     'sell': EmptyFeatures,
     'land_scan': EmptyFeatures,
     'restart': EmptyFeatures,
@@ -127,6 +133,7 @@ TASK_VIEW_CLASS_MAP = {
     'share': ShareTaskView,
     'reward': RewardTaskView,
     'gift': GiftTaskView,
+    'event_shop': EventShopTaskView,
     'sell': SellTaskView,
     'land_scan': LandScanTaskView,
     'restart': RestartTaskView,

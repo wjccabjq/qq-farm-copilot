@@ -39,6 +39,7 @@ from models.task_views import (
     TASK_VIEW_CLASS_MAP,
     TaskViewBase,
 )
+from tasks.event_shop import TaskEventShop
 from tasks.friend import TaskFriend
 from tasks.gift import TaskGift
 from tasks.land_scan import TaskLandScan
@@ -915,6 +916,15 @@ class BotExecutorMixin:
             return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskGift(engine=self, ui=self.ui)
+        return task.run(rect=rect)
+
+    def _run_task_event_shop(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_event_shop` 子流程。"""
+        rect, err = self._prepare_task_scene('event_shop')
+        if err is not None or rect is None:
+            return err or TaskResult(success=False, error='窗口未找到')
+        self._reset_device_runtime_guards()
+        task = TaskEventShop(engine=self, ui=self.ui)
         return task.run(rect=rect)
 
     def _run_task_land_scan(self, _ctx: TaskContext) -> TaskResult:
