@@ -25,7 +25,7 @@ from utils.land_grid import LandCell, get_lands_from_land_anchor
 from utils.ocr_utils import OCRItem, OCRTool
 
 # 画面横向回正手势点位 P1。
-LAND_SCAN_SWIPE_H_P1 = (350, 190)
+LAND_SCAN_SWIPE_H_P1 = (250, 190)
 # 画面横向回正手势点位 P2。
 LAND_SCAN_SWIPE_H_P2 = (200, 190)
 # 地块网格行数（逻辑行）。
@@ -122,7 +122,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
 
         try:
             # 右滑
-            for _ in range(2):
+            for _ in range(4):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
 
@@ -136,7 +136,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             )
 
             # 左滑
-            for _ in range(3):
+            for _ in range(6):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
 
