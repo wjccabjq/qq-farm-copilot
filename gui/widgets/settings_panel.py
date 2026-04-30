@@ -67,7 +67,7 @@ class SettingsPanel(QWidget):
         layout.addWidget(plant_card)
 
         self.level = SpinBox(plant_card)
-        self.level.setRange(1, 100)
+        self.level.setRange(1, 999)
         self.level_ocr = CheckBox('自动同步', plant_card)
         level_row = QWidget(plant_card)
         level_layout = QHBoxLayout(level_row)
