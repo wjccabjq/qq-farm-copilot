@@ -21,7 +21,7 @@
       "trigger": "interval",
       "interval_seconds": 60,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 30,
       "features": {
@@ -40,7 +40,7 @@
       "trigger": "interval",
       "interval_seconds": 1800,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 60,
       "features": {
@@ -60,7 +60,7 @@
       "trigger": "daily",
       "interval_seconds": 86400,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {}
@@ -70,7 +70,7 @@
       "trigger": "interval",
       "interval_seconds": 21600,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {
@@ -83,7 +83,7 @@
       "trigger": "daily",
       "interval_seconds": 86400,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:00",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {
@@ -97,7 +97,7 @@
       "trigger": "interval",
       "interval_seconds": 21600,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {}
@@ -107,7 +107,7 @@
       "trigger": "interval",
       "interval_seconds": 1800,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {}
@@ -117,7 +117,7 @@
       "trigger": "interval",
       "interval_seconds": 14400,
       "enabled_time_range": "00:00:00-23:59:59",
-      "daily_time": "00:01",
+      "daily_times": ["00:01"],
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {}

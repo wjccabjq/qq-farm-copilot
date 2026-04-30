@@ -159,6 +159,7 @@ python main.py
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
 - `tasks.<task>.enabled_time_range`：任务启用时间段（`HH:MM:SS-HH:MM:SS`，默认 `00:00:00-23:59:59`，仅 `INTERVAL` 生效）
+- `tasks.<task>.daily_times`：每日触发时间点列表（`list[HH:MM]`，仅 `DAILY` 生效）
 
 等级 OCR 相关（`planting`）：
 
@@ -174,7 +175,7 @@ python main.py
     "trigger": "interval",
     "interval_seconds": 60,
     "enabled_time_range": "00:00:00-23:59:59",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "failure_interval_seconds": 30,
     "features": {
@@ -188,7 +189,7 @@ python main.py
   "friend": {
     "enabled": true,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 1800,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -211,7 +212,7 @@ python main.py
   "share": {
     "enabled": true,
     "trigger": "daily",
-    "daily_time": "04:00",
+    "daily_times": ["04:00", "12:00", "20:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 86400,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -221,7 +222,7 @@ python main.py
   "reward": {
     "enabled": true,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 21600,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -234,7 +235,7 @@ python main.py
   "gift": {
     "enabled": true,
     "trigger": "daily",
-    "daily_time": "04:00",
+    "daily_times": ["04:00", "16:00"],
     "enabled_time_range": "00:00:00-23:59:59",
     "interval_seconds": 86400,
     "failure_interval_seconds": 300,
@@ -247,7 +248,7 @@ python main.py
   "land_scan": {
     "enabled": false,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 1800,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -257,7 +258,7 @@ python main.py
   "restart": {
     "enabled": false,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 14400,
     "enabled_time_range": "00:00:00-23:59:59",

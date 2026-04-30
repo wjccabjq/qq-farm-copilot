@@ -160,6 +160,32 @@ def normalize_task_enabled_time_range(value: Any) -> str:
     return DEFAULT_TASK_ENABLED_TIME_RANGE
 
 
+def normalize_task_daily_times(value: Any, *, fallback: str | None = None) -> list[str]:
+    """规范化每日触发时间列表，输出 `list[HH:MM]`。"""
+    raw_items: list[Any] = []
+    if isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    elif isinstance(value, str):
+        raw = value.strip()
+        if raw:
+            raw_items = [part for part in re.split(r'[,\s;|，；/]+', raw) if str(part).strip()]
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        text = _normalize_hh_mm_text(str(item or '').strip(), '')
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+
+    if out:
+        return out
+    if fallback is None:
+        return []
+    return [_normalize_hh_mm_text(str(fallback or '00:01').strip(), '00:01')]
+
+
 def normalize_executor_task_order(value: Any) -> str:
     """规范化任务顺序配置为 `task_a>task_b>task_c`。"""
     raw = str(value or DEFAULT_EXECUTOR_TASK_ORDER).strip()
@@ -191,7 +217,7 @@ class TaskScheduleItemConfig(ConfigModel):
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
     enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
-    daily_time: str = '00:01'
+    daily_times: list[str] = Field(default_factory=lambda: ['00:01'])
     next_run: str = DEFAULT_TASK_NEXT_RUN
     failure_interval_seconds: int = 60
     features: dict[str, Any] = Field(default_factory=dict)
@@ -208,12 +234,11 @@ class TaskScheduleItemConfig(ConfigModel):
         """规范化 `failure_interval` 输入值。"""
         return max(1, int(value))
 
-    @field_validator('daily_time', mode='before')
+    @field_validator('daily_times', mode='before')
     @classmethod
-    def _normalize_daily_time(cls, value):
-        """规范化 `daily_time` 输入值。"""
-        text = str(value or '00:01').strip()
-        return _normalize_hh_mm_text(text, '00:01')
+    def _normalize_daily_times(cls, value):
+        """规范化 `daily_times` 输入值。"""
+        return normalize_task_daily_times(value, fallback='00:01')
 
     @field_validator('enabled_time_range', mode='before')
     @classmethod

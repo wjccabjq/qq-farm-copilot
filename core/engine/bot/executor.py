@@ -26,10 +26,11 @@ from core.exceptions import (
 )
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
 from models.config import (
-    AppConfig,
     DEFAULT_TASK_ENABLED_TIME_RANGE,
+    AppConfig,
     TaskScheduleItemConfig,
     TaskTriggerType,
+    normalize_task_daily_times,
     normalize_task_enabled_time_range,
     parse_executor_task_order,
 )
@@ -557,7 +558,7 @@ class BotExecutorMixin:
             if parsed_next_run is not None:
                 next_run = parsed_next_run
             elif cfg is not None and cfg.trigger == TaskTriggerType.DAILY:
-                next_run = self._next_daily_target_time(cfg.daily_time, now)
+                next_run = self._next_daily_target_time(cfg.daily_times, now)
 
             out[task_name] = TaskItem(
                 name=task_name,
@@ -588,25 +589,28 @@ class BotExecutorMixin:
         return rect, None
 
     @staticmethod
-    def _next_daily_target_time(daily_time: str, now: datetime | None = None) -> datetime:
+    def _next_daily_target_time(daily_times: list[str] | str, now: datetime | None = None) -> datetime:
         """计算下一次每日触发的目标时间点（绝对时间）。"""
         current = now or datetime.now()
-        text = str(daily_time or '00:01')
-        try:
-            hour = int(text[:2])
-            minute = int(text[3:5])
-        except Exception:
-            hour, minute = 0, 1
-        target = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if target <= current:
-            target = target + timedelta(days=1)
-        return target
+        normalized = normalize_task_daily_times(daily_times, fallback='00:01')
+        targets: list[datetime] = []
+        for text in normalized:
+            try:
+                hour = int(text[:2])
+                minute = int(text[3:5])
+            except Exception:
+                hour, minute = 0, 1
+            target = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if target <= current:
+                target = target + timedelta(days=1)
+            targets.append(target)
+        return min(targets)
 
     @staticmethod
-    def _seconds_to_next_daily(daily_time: str, now: datetime | None = None) -> int:
+    def _seconds_to_next_daily(daily_times: list[str] | str, now: datetime | None = None) -> int:
         """计算距离下一次每日触发时间的秒数。"""
         current = now or datetime.now()
-        target = BotExecutorMixin._next_daily_target_time(daily_time, current)
+        target = BotExecutorMixin._next_daily_target_time(daily_times, current)
         # 避免 int 向下取整造成 1 秒偏差（例如 00:01 变成次日 00:00:59）。
         return max(1, int(math.ceil((target - current).total_seconds())))
 
@@ -642,7 +646,7 @@ class BotExecutorMixin:
         if cfg is None:
             return max(min_interval, int(self.config.executor.default_success_interval))
         if cfg.trigger == TaskTriggerType.DAILY:
-            return self._seconds_to_next_daily(cfg.daily_time, current)
+            return self._seconds_to_next_daily(cfg.daily_times, current)
         return max(min_interval, int(cfg.interval_seconds))
 
     def is_task_enabled(self, task_name: str, *, runtime: bool = True) -> bool:
@@ -693,7 +697,7 @@ class BotExecutorMixin:
             trigger=cfg.trigger,
             interval_seconds=int(cfg.interval_seconds),
             failure_interval_seconds=int(cfg.failure_interval_seconds),
-            daily_time=str(cfg.daily_time),
+            daily_times=list(cfg.daily_times),
             enabled_time_range=str(cfg.enabled_time_range),
             next_run=str(cfg.next_run),
             _task_call=lambda force_call: bool(self._task_executor and self._task_executor.task_call(name, force_call)),
@@ -709,7 +713,7 @@ class BotExecutorMixin:
             'trigger': base.trigger,
             'interval_seconds': base.interval_seconds,
             'failure_interval_seconds': base.failure_interval_seconds,
-            'daily_time': base.daily_time,
+            'daily_times': base.daily_times,
             'enabled_time_range': base.enabled_time_range,
             'next_run': base.next_run,
             '_task_call': base._task_call,
@@ -1067,7 +1071,7 @@ class BotExecutorMixin:
                 self._request_manual_takeover(reason=error_text or '重启任务失败，已停止任务')
                 return
 
-        # 对齐 NIKKE：daily 任务的下次执行时间由执行器统一按 daily_time 计算，
+        # 对齐 NIKKE：daily 任务的下次执行时间由执行器统一按 daily_times 计算，
         # 任务实现层无需每次显式返回 next_run_seconds。
         cfg = self._get_task_cfg(task_name)
         if (
@@ -1079,7 +1083,7 @@ class BotExecutorMixin:
         ):
             self._task_executor.task_delay(
                 task_name,
-                target_time=self._next_daily_target_time(cfg.daily_time),
+                target_time=self._next_daily_target_time(cfg.daily_times),
             )
 
         if result.success:
