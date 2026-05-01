@@ -118,11 +118,13 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         self._countdown_sync_time_persisted = False
         self.ui.ui_ensure(page_main)
         self.align_view_by_background_tree(log_prefix='地块巡查')
+        right_swipe_times = int(self.config.planting.land_swipe_right_times)
+        left_swipe_times = int(self.config.planting.land_swipe_left_times)
         # self.ui.device.click_button(GOTO_MAIN)
 
         try:
             # 右滑
-            for _ in range(4):
+            for _ in range(right_swipe_times):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
 
@@ -136,7 +138,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             )
 
             # 左滑
-            for _ in range(6):
+            for _ in range(left_swipe_times):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
 

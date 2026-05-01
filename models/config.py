@@ -380,6 +380,8 @@ class PlantingConfig(ConfigModel):
     virtual_desktop_index: int = 0
     planting_stable_seconds: float = 0.5
     planting_stable_timeout_seconds: float = 3.0
+    land_swipe_right_times: int = 4
+    land_swipe_left_times: int = 6
 
     @field_validator('player_level', mode='before')
     @classmethod
@@ -414,6 +416,16 @@ class PlantingConfig(ConfigModel):
         except Exception:
             index = 0
         return max(0, index)
+
+    @field_validator('land_swipe_right_times', 'land_swipe_left_times', mode='before')
+    @classmethod
+    def _normalize_land_swipe_times(cls, value):
+        """规范化土地左右滑动次数。"""
+        try:
+            times = int(value)
+        except Exception:
+            times = 0
+        return max(0, min(20, times))
 
 
 LAND_COL_COUNT = 6

@@ -157,7 +157,9 @@
     "window_position": "left_center",
     "virtual_desktop_index": 0,
     "planting_stable_seconds": 0.5,
-    "planting_stable_timeout_seconds": 3.0
+    "planting_stable_timeout_seconds": 3.0,
+    "land_swipe_right_times": 4,
+    "land_swipe_left_times": 6
   },
   "land": {
     "countdown_sync_time": "",

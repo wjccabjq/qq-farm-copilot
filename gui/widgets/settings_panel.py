@@ -302,6 +302,36 @@ class SettingsPanel(QWidget):
         )
         planting_stable_timeout_hint.setStyleSheet('color: #d97706;')
         advanced_form.addRow('', planting_stable_timeout_hint)
+        land_swipe_row = QWidget(advanced_card)
+        land_swipe_layout = QHBoxLayout(land_swipe_row)
+        land_swipe_layout.setContentsMargins(0, 0, 0, 0)
+        land_swipe_layout.setSpacing(8)
+        self.land_swipe_right_times = SpinBox(land_swipe_row)
+        self.land_swipe_right_times.setRange(0, 20)
+        self.land_swipe_left_times = SpinBox(land_swipe_row)
+        self.land_swipe_left_times.setRange(0, 20)
+        land_swipe_right = QWidget(land_swipe_row)
+        land_swipe_right.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_right_layout = QHBoxLayout(land_swipe_right)
+        land_swipe_right_layout.setContentsMargins(0, 0, 0, 0)
+        land_swipe_right_layout.setSpacing(6)
+        land_swipe_right_layout.addWidget(CaptionLabel('右滑', land_swipe_right))
+        self.land_swipe_right_times.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_right_layout.addWidget(self.land_swipe_right_times, 1)
+        land_swipe_left = QWidget(land_swipe_row)
+        land_swipe_left.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_left_layout = QHBoxLayout(land_swipe_left)
+        land_swipe_left_layout.setContentsMargins(0, 0, 0, 0)
+        land_swipe_left_layout.setSpacing(6)
+        land_swipe_left_layout.addWidget(CaptionLabel('左滑', land_swipe_left))
+        self.land_swipe_left_times.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_left_layout.addWidget(self.land_swipe_left_times, 1)
+        land_swipe_layout.addWidget(land_swipe_right, 1)
+        land_swipe_layout.addWidget(land_swipe_left, 1)
+        advanced_form.addRow(self._field_label('边界滑动次数', advanced_card), land_swipe_row)
+        land_swipe_hint = CaptionLabel('将画面滑动到左右边界的次数，土地巡查和升级共用。', advanced_card)
+        land_swipe_hint.setStyleSheet('color: #d97706;')
+        advanced_form.addRow('', land_swipe_hint)
 
         self.debug = CheckBox('启用 Debug 日志', advanced_card)
         advanced_form.addRow(self._field_label('调试日志', advanced_card), self.debug)
@@ -334,6 +364,8 @@ class SettingsPanel(QWidget):
             self.capture_interval.valueChanged,
             self.planting_stable.valueChanged,
             self.planting_stable_timeout.valueChanged,
+            self.land_swipe_right_times.valueChanged,
+            self.land_swipe_left_times.valueChanged,
             self.debug.toggled,
         ):
             sig.connect(self._save)
@@ -590,6 +622,8 @@ class SettingsPanel(QWidget):
         self.capture_interval.setValue(float(c.screenshot.capture_interval_seconds))
         self.planting_stable.setValue(float(c.planting.planting_stable_seconds))
         self.planting_stable_timeout.setValue(float(c.planting.planting_stable_timeout_seconds))
+        self.land_swipe_right_times.setValue(int(c.planting.land_swipe_right_times))
+        self.land_swipe_left_times.setValue(int(c.planting.land_swipe_left_times))
         self.debug.setChecked(bool(c.safety.debug_log_enabled))
         self.logs_path_label.setText(self._resolve_logs_path_text())
         self._refresh_windows()
@@ -628,6 +662,8 @@ class SettingsPanel(QWidget):
         c.screenshot.capture_interval_seconds = float(self.capture_interval.value())
         c.planting.planting_stable_seconds = float(self.planting_stable.value())
         c.planting.planting_stable_timeout_seconds = float(self.planting_stable_timeout.value())
+        c.planting.land_swipe_right_times = int(self.land_swipe_right_times.value())
+        c.planting.land_swipe_left_times = int(self.land_swipe_left_times.value())
         c.safety.debug_log_enabled = bool(self.debug.isChecked())
         c.save()
         self.config_changed.emit(c)

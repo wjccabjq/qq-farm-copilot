@@ -34,6 +34,7 @@
 - 全局日志保留：`%APPDATA%/QQFarmCopilot/app_settings.json -> logging.retention_days`（单位天，默认 `7`；启动与全局设置变更时清理过期 `.log`）
 - 截图频率：`config.screenshot.capture_interval_seconds`（默认 `0.3` 秒；`0` 表示不限制最小截图间隔）
 - 播种稳定超时：`config.planting.planting_stable_timeout_seconds`（默认 `3.0` 秒；用于背景树锚点稳定等待超时）
+- 土地滑动次数：`config.planting.land_swipe_right_times`（默认 `4`）与 `config.planting.land_swipe_left_times`（默认 `6`）；地块巡查与土地升级共用，滑动坐标仍使用代码内静态坐标
 - 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `BgPatchNumberOCR` 在区域 `x:[50,480], y:[地块点击y+40, 地块点击y+80]` 识别最左数字块
 - 活动作物跳过：`SEED_BTN_HEART_FRUIT`（爱心果）固定排除；`config.planting.skip_event_crops` 默认关闭，仅控制是否额外排除 `SEED_BTN_MUGWORT`（艾草）
 - 等级同步：播种前执行等级 OCR；由 `config.planting.level_ocr_enabled` 控制，识别后回写 `config.planting.player_level`；统一 ROI 使用 `tasks/main.py` 内常量（不区分平台）
@@ -195,7 +196,7 @@
 : 活动商店任务（默认开启，默认 `trigger=daily`，默认 `daily_times=["10:01","20:01"]`）；当前流程仅领取商城免费物品。
 
 - `land_scan`
-: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；流程为左滑 120 后扫描右到左前 5 列、右滑 240 后扫描左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集；从文本中正则提取 `HH:MM:SS` 回写到 `config.land.plots[].maturity_countdown`，并标记 `config.land.plots[].need_upgrade` 与 `config.land.plots[].need_planting`（空地为 `true`）。
+: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；左右滑动次数来自 `config.planting.land_swipe_right_times/land_swipe_left_times`，分段扫描右到左前 5 列与左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集；从文本中正则提取 `HH:MM:SS` 回写到 `config.land.plots[].maturity_countdown`，并标记 `config.land.plots[].need_upgrade` 与 `config.land.plots[].need_planting`（空地为 `true`）。
 
 - `restart`
 : 定时重启任务（默认关闭，默认 `interval_seconds=14400`）；重启等待使用实例级 `config.window_restart_delay_seconds`（默认 `5` 秒），执行时会校验 `window_shortcut_path` 并重启窗口后收敛回主页面。
