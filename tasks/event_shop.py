@@ -13,6 +13,7 @@ from core.ui.assets import (
     BTN_HAHA_SHOP,
     BTN_HAHA_SHOP_CHECK,
     BTN_HAHA_SHOP_CLOSE,
+    BTN_HAHA_SHOP_FREE_REFRESH,
     BTN_HAHA_SHOP_ITEM,
 )
 from core.ui.page import page_main
@@ -43,12 +44,15 @@ class TaskEventShop(TaskBase):
             if self.ui.appear_then_click(BTN_HAHA_SHOP, offset=30, interval=1):
                 continue
 
-        confirm_timer = Timer(1, count=3)
+        idle_timer = Timer(1, count=3)
         area_click_count: dict[tuple[int, int, int, int], int] = defaultdict(int)
         while 1:
             self.ui.device.screenshot()
             self._mask_clicked_haha_shop_items(area_click_count)
-
+            
+            if self.ui.appear_then_click(BTN_CLICK_TO_CLOSE, offset=30, interval=1):
+                idle_timer.clear()
+                continue
             if self.ui.appear(BTN_HAHA_SHOP_ITEM, offset=(-120, -10, 250, 180)):
                 hit_area = tuple(int(v) for v in BTN_HAHA_SHOP_ITEM.button)
                 if self.ui.device.click_button(BTN_HAHA_SHOP_ITEM):
@@ -58,19 +62,25 @@ class TaskEventShop(TaskBase):
                         logger.info('活动商店: 跳过该位置 | area={}', hit_area)
                     else:
                         logger.info('活动商店: 购买种子 | area={}', hit_area)
-                    confirm_timer.clear()
+                    idle_timer.clear()
                     self.ui.device.sleep(0.5)
                 continue
-            if self.ui.appear_then_click(BTN_CLICK_TO_CLOSE, offset=30, interval=1):
+            if self.ui.appear(BTN_HAHA_SHOP_FREE_REFRESH, offset=30):
+                if not idle_timer.started():
+                    idle_timer.start()
+                if idle_timer.reached():
+                    if self.ui.device.click_button(BTN_HAHA_SHOP_FREE_REFRESH):
+                        area_click_count.clear()
+                        self.ui.device.stuck_record_clear()
+                        self.ui.device.click_record_clear()
+                        idle_timer.clear()
+                        logger.info('活动商店: 点击免费刷新')
                 continue
-            if not self.ui.appear(BTN_HAHA_SHOP_ITEM, offset=(-120, -10, 250, 180)):
-                if not confirm_timer.started():
-                    confirm_timer.start()
-                if confirm_timer.reached():
-                    logger.info('活动商店: 种子购买完成')
-                    break
-            else:
-                confirm_timer.clear()
+            if not idle_timer.started():
+                idle_timer.start()
+            if idle_timer.reached():
+                logger.info('活动商店: 结束购买')
+                break
 
         while 1:
             self.ui.device.screenshot()
