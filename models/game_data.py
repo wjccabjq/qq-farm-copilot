@@ -162,6 +162,20 @@ def get_crop_by_name(name: str) -> tuple | None:
     return None
 
 
+def get_crop_seed_price(name: str) -> int | None:
+    """根据作物名称获取种子价格。"""
+    crop = get_crop_by_name(name)
+    if not crop:
+        return None
+    try:
+        price = int(crop[6])
+    except Exception:
+        return None
+    if price <= 0:
+        return None
+    return price
+
+
 def get_best_crop_for_level(level: int) -> tuple | None:
     """获取当前等级下单位时间经验最高的作物
 
@@ -220,7 +234,7 @@ def get_crop_display_info() -> list[str]:
 def get_crop_picker_items() -> list[tuple[str, str]]:
     """获取作物下拉框展示项：显示文案 + 作物名。"""
     items: list[tuple[str, str]] = []
-    for index, (name, _, level, _, _, _, price) in enumerate(CROPS, start=1):
-        label = f'{name} (等级Lv{level}, 品级{index}品, 种子价格{price})'
+    for name, _, level, _, _, _, price in CROPS:
+        label = f'{name} (等级Lv{level}, 种子价格{price})'
         items.append((label, name))
     return items

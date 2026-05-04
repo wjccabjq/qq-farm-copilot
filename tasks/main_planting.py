@@ -12,7 +12,7 @@ from core.exceptions import BuySeedError
 from core.ui.assets import *
 from core.ui.page import GOTO_MAIN, page_main, page_shop
 from models.config import PlantMode
-from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
+from models.game_data import get_best_crop_for_level, get_crop_seed_price, get_latest_crop_for_level
 from tasks.main import (
     ALWAYS_SKIP_SEED_BUTTONS,
     BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS,
@@ -499,6 +499,17 @@ class TaskMainPlantingMixin:
         """识别当前商店页，返回 OCR 匹配与白萝卜出现标记。"""
         cv_img = self.ui.device.screenshot()
         ocr_match = self.shop_ocr.find_item(cv_img, crop_name, min_similarity=0.80)
+        if not ocr_match.target:
+            target_price = get_crop_seed_price(crop_name)
+            if target_price is not None:
+                price_match = self.shop_ocr.find_item_by_price(cv_img, target_price)
+                if price_match.target:
+                    logger.info(
+                        '购买流程: 名称未命中，价格匹配成功 | 种子={} 价格={}',
+                        crop_name,
+                        target_price,
+                    )
+                    ocr_match = price_match
         has_white_radish = any(
             ('白萝卜' in str(item.name)) or ('白萝卜' in str(item.raw_name)) for item in ocr_match.parsed_items
         )
