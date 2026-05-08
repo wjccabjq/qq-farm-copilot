@@ -436,8 +436,9 @@ LAND_STATE_ALIASES: dict[str, str] = {
     '红': 'red',
     '黑': 'black',
     '金': 'gold',
+    '紫晶': 'amethyst',
 }
-LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold'}
+LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold', 'amethyst'}
 LAND_MATURITY_COUNTDOWN_PATTERN = re.compile(r'^(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})$')
 LAND_COUNTDOWN_SYNC_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
