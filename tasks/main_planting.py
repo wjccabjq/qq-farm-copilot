@@ -454,7 +454,7 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
 
     def _prepare_lands_and_open_seed_popup(
         self,
-    ) -> tuple[list[tuple[int, int]], list[str], tuple[int, int]] | None:
+    ) -> tuple[str, list[tuple[int, int]], list[str], tuple[int, int] | None]:
         """回到主界面后收集空地并打开种子候选框。"""
         self.ui.ui_ensure(page_main)
         self.ui.device.click_button(GOTO_MAIN)
@@ -463,13 +463,13 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         land_coords, pending_plot_refs = self._collect_pending_plant_land_coords()
         if not land_coords:
             logger.info('自动播种: 未发现空土地，跳过播种')
-            return None
+            return 'no_land', [], [], None
 
         before_labor_anchor = self._get_labor_anchor_location()
         seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
         if not self._open_seed_popup(seed_popup_land):
             logger.warning('自动播种: 打开种子候选框失败')
-            return None
+            return 'no_seed_popup', land_coords, pending_plot_refs, None
 
         after_labor_anchor = self._wait_labor_anchor_stable()
         if before_labor_anchor is not None and after_labor_anchor is not None:
@@ -483,7 +483,7 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         else:
             logger.warning('自动播种: 背景树锚点识别失败，继续使用原始地块坐标')
 
-        return land_coords, pending_plot_refs, seed_popup_land
+        return 'ready', land_coords, pending_plot_refs, seed_popup_land
 
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程。"""
@@ -501,8 +501,10 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                 logger.warning('自动播种: 仓库确认种子失败，结束本轮 | 作物={}', crop_name)
                 return []
 
-        prepared = self._prepare_lands_and_open_seed_popup()
-        if prepared is None:
+        prepare_status, land_coords, pending_plot_refs, seed_popup_land = self._prepare_lands_and_open_seed_popup()
+        if prepare_status == 'no_land':
+            return []
+        if prepare_status == 'no_seed_popup':
             if not use_warehouse_first:
                 logger.info('自动播种: 未发现种子候选框，尝试购买种子并重试 | 作物={}', crop_name)
                 buy_result = self._buy_seeds(crop_name)
@@ -518,8 +520,10 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                     return []
                 return self._plant_all(crop_name)
             return []
+        if prepare_status != 'ready' or seed_popup_land is None:
+            logger.warning('自动播种: 播种准备状态异常 | status={}', prepare_status)
+            return []
 
-        land_coords, pending_plot_refs, seed_popup_land = prepared
         if use_warehouse_first:
             cv_img = self.ui.device.screenshot()
             number_items = self._detect_seed_number_items(cv_img, seed_popup_land)
