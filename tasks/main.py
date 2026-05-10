@@ -135,6 +135,7 @@ class TaskMainLevelMixin:
         level, score, raw_text, extra_info = self.head_info_ocr.detect_head_info(
             cv_img,
             region=roi,
+            platform=str(self.config.planting.window_platform.value),
         )
         if extra_info:
             logger.debug(
