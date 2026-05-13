@@ -340,7 +340,32 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         )
         return None
 
-    def _collect_pending_plant_land_coords(self) -> tuple[list[tuple[int, int]], list[str]]:
+    @staticmethod
+    def _resolve_plot_ref_by_point(
+        detail_targets: list[tuple[str, tuple[int, int]]],
+        target_point: tuple[int, int],
+        *,
+        near_distance: float = 18.0,
+    ) -> str | None:
+        """按坐标就近匹配详情地块引用。"""
+        tx, ty = int(target_point[0]), int(target_point[1])
+        best_ref: str | None = None
+        best_distance: float | None = None
+        for ref, point in detail_targets:
+            px, py = int(point[0]), int(point[1])
+            distance = math.hypot(float(tx - px), float(ty - py))
+            if best_distance is None or distance < best_distance:
+                best_ref = str(ref)
+                best_distance = distance
+        if best_ref is None or best_distance is None:
+            return None
+        if best_distance > float(near_distance):
+            return None
+        return best_ref
+
+    def _collect_pending_plant_land_coords(
+        self,
+    ) -> tuple[list[tuple[int, int]], list[str], list[tuple[str, tuple[int, int]]]]:
         """收集当前需要播种的地块坐标与配置引用。"""
         detected_land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
         if self.is_task_enabled('land_scan'):
@@ -351,10 +376,10 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         pending_plot_refs = [str(ref) for ref, _ in detail_targets]
         land_coords = self._merge_land_coords(detected_land_coords, detail_land_coords)
         logger.info('自动播种: 空地识别完成 | 数量={}', len(land_coords))
-        return land_coords, pending_plot_refs
+        return land_coords, pending_plot_refs, detail_targets
 
-    def _open_seed_popup(self, land_click_point: tuple[int, int]) -> bool:
-        """点击空地并等待种子候选框出现。"""
+    def _open_seed_popup(self, land_click_point: tuple[int, int]) -> str:
+        """点击空地并等待种子候选框出现，返回 opened/already_planted/failed。"""
         land_x, land_y = int(land_click_point[0]), int(land_click_point[1])
         for attempt in range(1, 3):
             self.engine.device.click_point(land_x, land_y, desc='点击可播种地块')
@@ -362,14 +387,14 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
             cv_img = self.ui.device.screenshot()
             number_items = self._detect_seed_number_items(cv_img, (land_x, land_y))
             if number_items:
-                return True
+                return 'opened'
             if self.ui.appear(BTN_CROP_REMOVAL, offset=30, static=False):
                 logger.info('自动播种: 该地块已种植，结束本轮播种 | 坐标=({}, {})', land_x, land_y)
                 self.ui.device.click_button(GOTO_MAIN)
                 self.ui.device.sleep(0.2)
-                return False
+                return 'already_planted'
             logger.debug('自动播种: 种子候选框未出现，重试 | 次数={}', attempt)
-        return False
+        return 'failed'
 
     def _get_seed_popup_item_points(self, land_click_point: tuple[int, int]) -> list[tuple[int, int]]:
         """返回当前候选框中按从左到右排列的种子拖拽点。"""
@@ -460,14 +485,22 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         self.ui.device.click_button(GOTO_MAIN)
         self.align_view_by_background_tree(log_prefix='自动播种')
 
-        land_coords, pending_plot_refs = self._collect_pending_plant_land_coords()
+        land_coords, pending_plot_refs, detail_targets = self._collect_pending_plant_land_coords()
         if not land_coords:
             logger.info('自动播种: 未发现空土地，跳过播种')
             return 'no_land', [], [], None
 
         before_labor_anchor = self._get_labor_anchor_location()
         seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
-        if not self._open_seed_popup(seed_popup_land):
+        selected_plot_ref = self._resolve_plot_ref_by_point(detail_targets, seed_popup_land)
+        if selected_plot_ref is None and len(pending_plot_refs) == 1:
+            selected_plot_ref = str(pending_plot_refs[0])
+        open_seed_popup_status = self._open_seed_popup(seed_popup_land)
+        if open_seed_popup_status == 'already_planted':
+            if selected_plot_ref:
+                self.backfill_land_flag_false([selected_plot_ref], 'need_planting', log_prefix='自动播种: 已种植回填')
+            return 'already_planted', land_coords, pending_plot_refs, None
+        if open_seed_popup_status != 'opened':
             logger.warning('自动播种: 打开种子候选框失败')
             return 'no_seed_popup', land_coords, pending_plot_refs, None
 
@@ -503,6 +536,8 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
 
         prepare_status, land_coords, pending_plot_refs, seed_popup_land = self._prepare_lands_and_open_seed_popup()
         if prepare_status == 'no_land':
+            return []
+        if prepare_status == 'already_planted':
             return []
         if prepare_status == 'no_seed_popup':
             if not use_warehouse_first:
