@@ -21,6 +21,11 @@ if TYPE_CHECKING:
 class UI(Handler):
     """封装 `UI` 相关的数据与行为。"""
 
+    PAGE_CHECK_THRESHOLD_OVERRIDES = {
+        'warehouse_seed_check': 0.85,
+    }
+    DEFAULT_PAGE_CHECK_THRESHOLD = 0.74
+
     ui_pages = [
         page_unknown,
         page_main,
@@ -58,8 +63,26 @@ class UI(Handler):
         if isinstance(check, (list, tuple, set)):
             if not check:
                 return False
-            return all(self.appear(btn, offset=(30, 30), static=False) for btn in check)
-        return self.appear(check, offset=(30, 30), static=False)
+            return all(
+                self.appear(
+                    btn,
+                    offset=(30, 30),
+                    threshold=self._resolve_page_check_threshold(btn),
+                    static=False,
+                )
+                for btn in check
+            )
+        return self.appear(
+            check,
+            offset=(30, 30),
+            threshold=self._resolve_page_check_threshold(check),
+            static=False,
+        )
+
+    def _resolve_page_check_threshold(self, button) -> float:
+        """返回页面判定按钮阈值；未命中特殊规则时保持默认值。"""
+        button_name = str(getattr(button, 'name', '') or '').strip()
+        return float(self.PAGE_CHECK_THRESHOLD_OVERRIDES.get(button_name, self.DEFAULT_PAGE_CHECK_THRESHOLD))
 
     def ui_get_current_page(self, timeout=15.0):
         """识别当前页面；未知时尝试回主与弹窗处理，直到超时。"""
