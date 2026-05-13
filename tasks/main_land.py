@@ -248,5 +248,6 @@ class TaskMainLandMixin:
             targets_6789 = self._collect_group_targets_after_swipe(refs_6789)
             self._upgrade_targets(targets_6789)
 
+        self.align_view_by_background_tree(log_prefix='自动升级流程-结束回正')
         logger.info('自动升级流程: 结束')
         return
