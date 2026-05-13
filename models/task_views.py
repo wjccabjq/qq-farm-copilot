@@ -72,6 +72,11 @@ class GiftFeatures:
 
 
 @dataclass(slots=True)
+class TimedHarvestFeatures:
+    aggregation_seconds: int = 30
+
+
+@dataclass(slots=True)
 class MainTaskView(TaskViewBase):
     feature: MainFeatures = field(default_factory=MainFeatures)
 
@@ -112,6 +117,11 @@ class LandScanTaskView(TaskViewBase):
 
 
 @dataclass(slots=True)
+class TimedHarvestTaskView(TaskViewBase):
+    feature: TimedHarvestFeatures = field(default_factory=TimedHarvestFeatures)
+
+
+@dataclass(slots=True)
 class RestartTaskView(TaskViewBase):
     feature: EmptyFeatures = field(default_factory=EmptyFeatures)
 
@@ -125,6 +135,7 @@ TASK_FEATURE_CLASS_MAP = {
     'event_shop': EmptyFeatures,
     'sell': EmptyFeatures,
     'land_scan': EmptyFeatures,
+    'timed_harvest': TimedHarvestFeatures,
     'restart': EmptyFeatures,
 }
 
@@ -137,5 +148,6 @@ TASK_VIEW_CLASS_MAP = {
     'event_shop': EventShopTaskView,
     'sell': SellTaskView,
     'land_scan': LandScanTaskView,
+    'timed_harvest': TimedHarvestTaskView,
     'restart': RestartTaskView,
 }

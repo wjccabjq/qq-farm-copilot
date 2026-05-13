@@ -47,6 +47,7 @@ from tasks.main import TaskMain
 from tasks.reward import TaskReward
 from tasks.sell import TaskSell
 from tasks.share import TaskShare
+from tasks.timed_harvest import TaskTimedHarvest
 from utils.app_paths import load_config_json_object
 from utils.feature_policy import get_forced_off_features
 
@@ -57,6 +58,7 @@ class BotExecutorMixin:
     config: AppConfig
 
     _NEXT_RUN_PARSE_FORMATS = ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M')
+    _TIMED_HARVEST_TASK = 'timed_harvest'
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -934,6 +936,15 @@ class BotExecutorMixin:
             return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskLandScan(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
+        return task.run(rect=rect)
+
+    def _run_task_timed_harvest(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_timed_harvest` 子流程。"""
+        rect, err = self._prepare_task_scene(self._TIMED_HARVEST_TASK)
+        if err is not None or rect is None:
+            return err or TaskResult(success=False, error='窗口未找到')
+        self._reset_device_runtime_guards()
+        task = TaskTimedHarvest(engine=self, ui=self.ui)
         return task.run(rect=rect)
 
     def _run_task_restart(self, _ctx: TaskContext) -> TaskResult:

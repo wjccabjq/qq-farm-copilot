@@ -119,7 +119,7 @@ class TaskTriggerType(str, Enum):
 DEFAULT_MIN_TASK_INTERVAL_SECONDS = 5
 DEFAULT_TASK_NEXT_RUN = '2026-01-01 00:00'
 DEFAULT_TASK_ENABLED_TIME_RANGE = '00:00:00-23:59:59'
-DEFAULT_EXECUTOR_TASK_ORDER = 'land_scan>main>friend>sell>reward>gift>event_shop>share>restart'
+DEFAULT_EXECUTOR_TASK_ORDER = 'land_scan>timed_harvest>main>friend>sell>reward>gift>event_shop>share>restart'
 
 
 def _normalize_hh_mm_text(text: str, fallback: str) -> str:
@@ -201,6 +201,24 @@ def normalize_executor_task_order(value: Any) -> str:
         out.append(name)
     if not out:
         return DEFAULT_EXECUTOR_TASK_ORDER
+    default_order = [item for item in DEFAULT_EXECUTOR_TASK_ORDER.split('>') if item]
+    for idx, task_name in enumerate(default_order):
+        if task_name in out:
+            continue
+        insert_at: int | None = None
+        for prev in reversed(default_order[:idx]):
+            if prev in out:
+                insert_at = out.index(prev) + 1
+                break
+        if insert_at is None:
+            for nxt in default_order[idx + 1 :]:
+                if nxt in out:
+                    insert_at = out.index(nxt)
+                    break
+        if insert_at is None:
+            out.append(task_name)
+        else:
+            out.insert(insert_at, task_name)
     return '>'.join(out)
 
 
@@ -208,6 +226,30 @@ def parse_executor_task_order(value: Any) -> list[str]:
     """解析任务顺序配置文本。"""
     normalized = normalize_executor_task_order(value)
     return [item for item in normalized.split('>') if item]
+
+
+def resolve_executor_task_order(task_names: list[str], task_order: Any) -> list[str]:
+    """按 `executor.task_order` 解析任务顺序，并补齐未声明任务。"""
+    names = [str(name) for name in task_names]
+    known = set(names)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    for name in parse_executor_task_order(task_order):
+        task_name = str(name)
+        if not task_name or task_name in seen or task_name not in known:
+            continue
+        seen.add(task_name)
+        out.append(task_name)
+
+    for name in names:
+        task_name = str(name)
+        if not task_name or task_name in seen:
+            continue
+        seen.add(task_name)
+        out.append(task_name)
+
+    return out
 
 
 class TaskScheduleItemConfig(ConfigModel):
@@ -471,6 +513,7 @@ def build_default_land_plots() -> list[dict[str, Any]]:
             'plot_id': plot_id,
             'level': 'unbuilt',
             'maturity_countdown': '',
+            'countdown_sync_time': '',
             'need_upgrade': False,
             'need_planting': False,
         }
@@ -580,14 +623,7 @@ class LandDetailConfig(ConfigModel):
             return str(value or '').strip()
 
     plots: list[dict[str, Any]] = Field(default_factory=build_default_land_plots)
-    countdown_sync_time: str = ''
     profile: ProfileConfig = Field(default_factory=ProfileConfig)
-
-    @field_validator('countdown_sync_time', mode='before')
-    @classmethod
-    def _normalize_countdown_sync_time(cls, value):
-        """规范化倒计时基准时间。"""
-        return normalize_land_countdown_sync_time(value)
 
     @field_validator('plots', mode='before')
     @classmethod
@@ -599,6 +635,7 @@ class LandDetailConfig(ConfigModel):
                 'plot_id': plot_id,
                 'level': 'unbuilt',
                 'maturity_countdown': '',
+                'countdown_sync_time': '',
                 'need_upgrade': False,
                 'need_planting': False,
             }
@@ -609,6 +646,7 @@ class LandDetailConfig(ConfigModel):
             plot_id_raw: Any,
             level_raw: Any,
             maturity_countdown_raw: Any = '',
+            countdown_sync_time_raw: Any = '',
             need_upgrade_raw: Any = False,
             need_planting_raw: Any = False,
         ) -> None:
@@ -617,6 +655,7 @@ class LandDetailConfig(ConfigModel):
                 return
             plot_map[normalized_id]['level'] = normalize_land_level(level_raw)
             plot_map[normalized_id]['maturity_countdown'] = normalize_land_maturity_countdown(maturity_countdown_raw)
+            plot_map[normalized_id]['countdown_sync_time'] = normalize_land_countdown_sync_time(countdown_sync_time_raw)
             plot_map[normalized_id]['need_upgrade'] = normalize_land_need_upgrade(need_upgrade_raw)
             plot_map[normalized_id]['need_planting'] = normalize_land_need_planting(need_planting_raw)
 
@@ -627,11 +666,12 @@ class LandDetailConfig(ConfigModel):
                         plot_id,
                         item.get('level'),
                         item.get('maturity_countdown'),
+                        item.get('countdown_sync_time'),
                         item.get('need_upgrade'),
                         item.get('need_planting'),
                     )
                 else:
-                    _apply_item(plot_id, item, '', False, False)
+                    _apply_item(plot_id, item, '', '', False, False)
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
@@ -639,6 +679,7 @@ class LandDetailConfig(ConfigModel):
                         item.get('plot_id'),
                         item.get('level'),
                         item.get('maturity_countdown'),
+                        item.get('countdown_sync_time'),
                         item.get('need_upgrade'),
                         item.get('need_planting'),
                     )
@@ -652,6 +693,7 @@ class LandDetailConfig(ConfigModel):
                         dumped.get('plot_id'),
                         dumped.get('level'),
                         dumped.get('maturity_countdown'),
+                        dumped.get('countdown_sync_time'),
                         dumped.get('need_upgrade'),
                         dumped.get('need_planting'),
                     )

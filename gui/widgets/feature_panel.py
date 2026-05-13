@@ -33,7 +33,7 @@ from qfluentwidgets import (
 )
 
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
-from models.config import AppConfig, normalize_task_enabled_time_range
+from models.config import AppConfig, normalize_task_enabled_time_range, resolve_executor_task_order
 from utils.app_paths import load_config_json_object
 from utils.feature_policy import is_feature_forced_off
 
@@ -192,7 +192,10 @@ class FeaturePanel(QWidget):
         col_heights = [0, 0]
 
         index = 0
-        for task_name, task_cfg in self.config.tasks.items():
+        for task_name in self._resolve_task_order():
+            task_cfg = self.config.tasks.get(task_name)
+            if task_cfg is None:
+                continue
             feature_map = task_cfg.features or {}
             if not isinstance(feature_map, dict) or not feature_map:
                 continue
@@ -209,6 +212,10 @@ class FeaturePanel(QWidget):
                 col.addStretch()
             content_layout.addLayout(waterfall)
         content_layout.addStretch()
+
+    def _resolve_task_order(self) -> list[str]:
+        task_names = [str(name) for name in self.config.tasks.keys()]
+        return resolve_executor_task_order(task_names, self.config.executor.task_order)
 
     @staticmethod
     def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:
@@ -389,6 +396,15 @@ class FeaturePanel(QWidget):
         return str(text or '').strip()
 
     @staticmethod
+    def _normalize_int_feature_value(value: Any) -> int:
+        """规范化整数字段值。"""
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = 0
+        return max(0, parsed)
+
+    @staticmethod
     def _split_interval(seconds: int) -> tuple[int, int]:
         value = max(0, int(seconds))
         if value > 0 and value % 3600 == 0:
@@ -495,7 +511,7 @@ class FeaturePanel(QWidget):
             if task_cfg is None:
                 continue
             feature_map = dict(task_cfg.features or {})
-            feature_map[feature_name] = max(0, int(spin.value()))
+            feature_map[feature_name] = self._normalize_int_feature_value(spin.value())
             task_cfg.features = feature_map
         for (task_name, feature_name), text_edit in self._text_widgets.items():
             task_cfg = self.config.tasks.get(task_name)
@@ -543,11 +559,7 @@ class FeaturePanel(QWidget):
             value = feature_map.get(feature_name, 0)
             if isinstance(value, bool):
                 value = 0
-            try:
-                parsed = int(value)
-            except Exception:
-                parsed = 0
-            spin.setValue(max(0, parsed))
+            spin.setValue(self._normalize_int_feature_value(value))
         for (task_name, feature_name), text_edit in self._text_widgets.items():
             task_cfg = self.config.tasks.get(task_name)
             if task_cfg is None:
