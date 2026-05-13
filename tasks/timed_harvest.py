@@ -19,6 +19,7 @@ from tasks.base import TaskBase
 # 聚合窗口附加缓冲秒数：覆盖窗口尾部成熟地块。
 TIMED_HARVEST_WINDOW_BUFFER_SECONDS = 3
 TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS = 5.0
+TIMED_HARVEST_DEADLINE_EXTEND_SECONDS = 5
 
 
 class TaskTimedHarvest(TaskBase):
@@ -176,30 +177,34 @@ class TaskTimedHarvest(TaskBase):
             total_window_seconds,
         )
 
-        while datetime.now() <= deadline:
+        while 1:
             self.ui.device.screenshot()
-            if self.ui.appear(BTN_HARVEST_POP, offset=100):
+            if self.ui.appear_then_click(BTN_HARVEST, offset=30, interval=0.5, static=False):
+                self.engine._record_stat(ActionType.HARVEST)
+                action_count += 1
+                self.ui.device.click_record_clear()
+                if datetime.now() >= deadline:
+                    deadline = datetime.now() + timedelta(seconds=TIMED_HARVEST_DEADLINE_EXTEND_SECONDS)
+                continue
+            if self.ui.appear_then_click(BTN_MATURE, offset=30, interval=0.5, static=False):
+                self.engine._record_stat(ActionType.HARVEST)
+                action_count += 1
+                self.ui.device.click_record_clear()
+                if datetime.now() >= deadline:
+                    deadline = datetime.now() + timedelta(seconds=TIMED_HARVEST_DEADLINE_EXTEND_SECONDS)
+                continue
+            if self.ui.appear(BTN_HARVEST_POP, offset=100, threshold=0.6):
                 if not goto_main_click_timer.started() or goto_main_click_timer.reached_and_reset():
                     self.ui.device.click_button(GOTO_MAIN)
                     goto_main_click_timer.start()
                 continue
-            if self.ui.appear(BTN_WITHERED, offset=30, threshold=0.9, static=False):
+            if self.ui.appear(BTN_WITHERED, offset=30, threshold=0.8, static=False):
                 if not withered_action_timer.started() or withered_action_timer.reached_and_reset():
                     self.ui.device.click_point(
                         int(land_1_1_center[0]), int(land_1_1_center[1]), desc='定时收获-枯萎处理'
                     )
                     self.ui.device.click_button(GOTO_MAIN)
                     withered_action_timer.start()
-                continue
-            if self.ui.appear_then_click(BTN_HARVEST, offset=30, interval=0.5, static=False):
-                self.engine._record_stat(ActionType.HARVEST)
-                action_count += 1
-                self.ui.device.click_record_clear()
-                continue
-            elif self.ui.appear_then_click(BTN_MATURE, offset=30, interval=0.5, static=False):
-                self.engine._record_stat(ActionType.HARVEST)
-                action_count += 1
-                self.ui.device.click_record_clear()
                 continue
 
             now = datetime.now()

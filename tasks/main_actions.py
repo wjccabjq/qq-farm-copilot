@@ -36,12 +36,10 @@ class TaskMainActionsMixin:
             if self.ui.appear_then_click(BTN_HARVEST, offset=30, interval=1, static=False):
                 self.engine._record_stat(ActionType.HARVEST)
                 continue
-            if self.ui.appear_then_click(BTN_MATURE, offset=30, interval=1, static=False):
-                self.engine._record_stat(ActionType.HARVEST)
-                continue
-            if not self.ui.appear(BTN_HARVEST, offset=30, static=False) and not self.ui.appear(
-                BTN_MATURE, offset=30, static=False
-            ):
+            # if self.ui.appear_then_click(BTN_MATURE, offset=30, interval=1, static=False):
+            #     self.engine._record_stat(ActionType.HARVEST)
+            #     continue
+            if not self.ui.appear(BTN_HARVEST, offset=30, static=False):
                 if not confirm_timer.started():
                     confirm_timer.start()
                 if confirm_timer.reached():
