@@ -294,41 +294,24 @@ class TaskFriend(TaskBase):
             )
             return
 
-        help_allowed_current = help_available
-        if help_allowed_current and self._help_only_guard_dog:
-            help_allowed_current = self._is_current_friend_guard_dog()
-        skipped_by_guard_dog = help_available and self._help_only_guard_dog and not help_allowed_current
-
-        if skipped_by_guard_dog and not steal_available:
-            if not self._goto_next_friend():
-                logger.info('好友巡查: 切换下一位好友失败，结束好友任务')
-                return
-            self._run_friend_recursive(
-                enable_help=enable_help,
-                enable_steal=enable_steal,
-                enable_steal_stats=enable_steal_stats,
-                steal_time_range=steal_time_range,
-                help_time_range=help_time_range,
-                steal_limit_count=steal_limit_count,
-                help_limit_count=help_limit_count,
-                steal_done_count=steal_done_count,
-                help_done_count=help_done_count,
-                no_action=no_action,
-            )
-            return
-
-        has_action = self._has_current_friend_actions(enable_help=help_allowed_current, enable_steal=steal_available)
+        has_steal_action, has_help_action = self._get_current_friend_action_flags(
+            detect_help=help_available,
+            detect_steal=steal_available,
+        )
+        has_action = bool(has_steal_action or has_help_action)
         if not has_action:
-            if skipped_by_guard_dog:
-                logger.info('好友巡查: 当前好友非护主犬且无偷菜动作，本轮不计入连续空轮询')
-            else:
-                no_action += 1
-                logger.info('好友巡查: 当前好友无可执行动作，连续空轮询={}/{}', no_action, FRIEND_NO_ACTION_EXIT_STREAK)
-                if no_action >= FRIEND_NO_ACTION_EXIT_STREAK:
-                    logger.info('好友巡查: 连续无动作达到阈值，结束好友任务')
-                    return
+            no_action += 1
+            logger.info('好友巡查: 当前好友无可执行动作，连续空轮询={}/{}', no_action, FRIEND_NO_ACTION_EXIT_STREAK)
+            if no_action >= FRIEND_NO_ACTION_EXIT_STREAK:
+                logger.info('好友巡查: 连续无动作达到阈值，结束好友任务')
+                return
         else:
             no_action = 0
+            help_allowed_current = has_help_action
+            if help_allowed_current and self._help_only_guard_dog:
+                help_allowed_current = self._is_current_friend_guard_dog()
+                if not help_allowed_current and not has_steal_action:
+                    logger.info('好友巡查: 当前好友帮忙受护主犬限制，跳过帮忙动作')
             if steal_available and self._run_feature_steal(enable_steal_stats=enable_steal_stats):
                 steal_done_count += 1
                 logger.info(
@@ -375,17 +358,16 @@ class TaskFriend(TaskBase):
         logger.info('好友巡查: 护主犬识别超时，跳过当前好友')
         return False
 
-    def _has_current_friend_actions(self, *, enable_help: bool, enable_steal: bool) -> bool:
-        """判断当前好友界面是否有可执行操作按钮（使用 BTN 模板）。"""
+    def _get_current_friend_action_flags(self, *, detect_help: bool, detect_steal: bool) -> tuple[bool, bool]:
+        """判断当前好友界面是否存在偷菜/帮忙动作按钮。"""
         self.ui.device.screenshot()
-        buttons: list[Button] = []
-        if enable_steal:
-            buttons.extend([BTN_STEAL, BTN_MATURE])
-        if enable_help:
-            buttons.extend([BTN_WATER, BTN_WEED, BTN_BUG])
-        if not buttons:
-            return False
-        return bool(self.ui.appear_any(buttons, offset=30, static=False))
+        has_steal_action = False
+        has_help_action = False
+        if detect_steal:
+            has_steal_action = bool(self.ui.appear_any([BTN_STEAL, BTN_MATURE], offset=30, static=False))
+        if detect_help:
+            has_help_action = bool(self.ui.appear_any([BTN_WATER, BTN_WEED, BTN_BUG], offset=30, static=False))
+        return has_steal_action, has_help_action
 
     def _enter_friend_detail(self, *, enable_steal: bool, enable_help: bool) -> bool:
         """从好友列表页进入某个好友详情页。"""
@@ -549,7 +531,7 @@ class TaskFriend(TaskBase):
                 detected_name or '<empty>',
                 step_offset,
             )
-            self.ui.device.sleep(0.2)
+            self.ui.device.sleep(0.5)
             return True
 
         logger.info('好友巡查: 点击下一位好友失败')
