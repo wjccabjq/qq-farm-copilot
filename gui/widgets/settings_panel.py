@@ -297,6 +297,25 @@ class SettingsPanel(QWidget):
         self.max_actions.setRange(1, 500)
         advanced_form.addRow(self._field_label('单轮点击上限', advanced_card), self.max_actions)
 
+        self.stuck_seconds = SpinBox(advanced_card)
+        self.stuck_seconds.setRange(1, 3600)
+        self.stuck_seconds.setSuffix(' 秒')
+        advanced_form.addRow(self._field_label('卡死判定起始', advanced_card), self.stuck_seconds)
+        stuck_seconds_hint = CaptionLabel('无有效点击达到该时长后，进入长等待白名单判定。', advanced_card)
+        stuck_seconds_hint.setStyleSheet('color: #d97706;')
+        advanced_form.addRow('', stuck_seconds_hint)
+
+        self.stuck_long_wait_seconds = SpinBox(advanced_card)
+        self.stuck_long_wait_seconds.setRange(1, 3600)
+        self.stuck_long_wait_seconds.setSuffix(' 秒')
+        advanced_form.addRow(self._field_label('卡死强制超时', advanced_card), self.stuck_long_wait_seconds)
+        stuck_long_wait_hint = CaptionLabel(
+            '无有效点击达到该时长后强制判定卡死，且不再放行长等待白名单。',
+            advanced_card,
+        )
+        stuck_long_wait_hint.setStyleSheet('color: #d97706;')
+        advanced_form.addRow('', stuck_long_wait_hint)
+
         self.capture_interval = DoubleSpinBox(advanced_card)
         self.capture_interval.setRange(0.0, 5.0)
         self.capture_interval.setDecimals(2)
@@ -387,6 +406,8 @@ class SettingsPanel(QWidget):
             self.delay_max.valueChanged,
             self.offset.valueChanged,
             self.max_actions.valueChanged,
+            self.stuck_seconds.valueChanged,
+            self.stuck_long_wait_seconds.valueChanged,
             self.capture_interval.valueChanged,
             self.window_launch_wait_timeout.valueChanged,
             self.startup_stabilize_timeout.valueChanged,
@@ -647,6 +668,8 @@ class SettingsPanel(QWidget):
         self.delay_max.setValue(float(c.safety.random_delay_max))
         self.offset.setValue(int(c.safety.click_offset_range))
         self.max_actions.setValue(int(c.safety.max_actions_per_round))
+        self.stuck_seconds.setValue(int(c.safety.stuck_seconds))
+        self.stuck_long_wait_seconds.setValue(int(c.safety.stuck_long_wait_seconds))
         self.capture_interval.setValue(float(c.screenshot.capture_interval_seconds))
         self.window_launch_wait_timeout.setValue(float(c.recovery.window_launch_wait_timeout_seconds))
         self.startup_stabilize_timeout.setValue(float(c.recovery.startup_stabilize_timeout_seconds))
@@ -689,6 +712,8 @@ class SettingsPanel(QWidget):
         c.safety.random_delay_max = max(d_min, d_max)
         c.safety.click_offset_range = int(self.offset.value())
         c.safety.max_actions_per_round = int(self.max_actions.value())
+        c.safety.stuck_seconds = int(self.stuck_seconds.value())
+        c.safety.stuck_long_wait_seconds = int(self.stuck_long_wait_seconds.value())
         c.screenshot.capture_interval_seconds = float(self.capture_interval.value())
         c.recovery.window_launch_wait_timeout_seconds = float(self.window_launch_wait_timeout.value())
         c.recovery.startup_stabilize_timeout_seconds = float(self.startup_stabilize_timeout.value())

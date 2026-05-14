@@ -32,8 +32,8 @@ class DeviceTooManyClickError(RuntimeError):
 class Device:
     """提供 `Device` 的设备能力适配接口。"""
 
-    _STUCK_SECONDS = 180.0
-    _STUCK_LONG_WAIT_SECONDS = 300.0
+    _DEFAULT_STUCK_SECONDS = 60.0
+    _DEFAULT_STUCK_LONG_WAIT_SECONDS = 120.0
     _CLICK_RECORD_MAXLEN = 30
     _TOO_MANY_CLICK_SINGLE_THRESHOLD = 20
     _TOO_MANY_CLICK_DUAL_THRESHOLD = 12
@@ -348,10 +348,11 @@ class Device:
 
     def stuck_record_check(self):
         """检查是否长时间无有效点击。"""
+        stuck_seconds, stuck_long_wait_seconds = self._resolve_stuck_thresholds()
         elapsed = time.perf_counter() - self._stuck_started_at
-        if elapsed < self._STUCK_SECONDS:
+        if elapsed < stuck_seconds:
             return False
-        if elapsed < self._STUCK_LONG_WAIT_SECONDS:
+        if elapsed < stuck_long_wait_seconds:
             for button in self.stuck_long_wait_list:
                 if button in self.detect_record:
                     return False
@@ -361,6 +362,21 @@ class Device:
         if self.app_is_running():
             raise DeviceStuckError('wait too long')
         raise DeviceStuckError('app is not running')
+
+    def _resolve_stuck_thresholds(self) -> tuple[float, float]:
+        """读取并规范化卡死判定阈值（秒）。"""
+        safety = self.config.safety
+        try:
+            stuck_seconds = float(safety.stuck_seconds)
+        except Exception:
+            stuck_seconds = self._DEFAULT_STUCK_SECONDS
+        try:
+            stuck_long_wait_seconds = float(safety.stuck_long_wait_seconds)
+        except Exception:
+            stuck_long_wait_seconds = self._DEFAULT_STUCK_LONG_WAIT_SECONDS
+        stuck_seconds = max(1.0, stuck_seconds)
+        stuck_long_wait_seconds = max(stuck_seconds, stuck_long_wait_seconds)
+        return stuck_seconds, stuck_long_wait_seconds
 
     def stuck_record_add(self, button):
         """记录一次“尝试识别但未点击”的按钮。"""

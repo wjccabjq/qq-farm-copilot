@@ -89,8 +89,30 @@ class SafetyConfig(ConfigModel):
     random_delay_max: float = 0.3
     click_offset_range: int = 5
     max_actions_per_round: int = 20
+    stuck_seconds: int = 60
+    stuck_long_wait_seconds: int = 120
     run_mode: RunMode = RunMode.BACKGROUND
     debug_log_enabled: bool = False
+
+    @field_validator('stuck_seconds', mode='before')
+    @classmethod
+    def _normalize_stuck_seconds(cls, value):
+        """规范化卡死判定起始阈值（秒）。"""
+        try:
+            seconds = int(value)
+        except Exception:
+            seconds = 60
+        return max(1, seconds)
+
+    @field_validator('stuck_long_wait_seconds', mode='before')
+    @classmethod
+    def _normalize_stuck_long_wait_seconds(cls, value):
+        """规范化卡死判定强制超时（秒）。"""
+        try:
+            seconds = int(value)
+        except Exception:
+            seconds = 120
+        return max(1, seconds)
 
 
 class ScreenshotConfig(ConfigModel):

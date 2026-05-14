@@ -151,7 +151,7 @@ python main.py
 - `window_shortcut_launch_delay_seconds`：快捷方式启动后延迟初始化窗口的秒数（默认 `3`）
 - `window_restart_delay_seconds`：窗口重启流程中“关闭后到重新拉起前”的等待秒数（默认 `5`）
 - `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
-- `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
+- `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、卡死判定阈值（`stuck_seconds` 默认 `60`、`stuck_long_wait_seconds` 默认 `120`）、`debug_log_enabled`
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
 - `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置；`virtual_desktop_index` 为目标虚拟桌面序号，`0` 表示不移动）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（与仓库优先同时开启时，按关闭仓库优先处理；固定排除作物始终生效）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）、`land_swipe_right_times/land_swipe_left_times`（土地相关流程右滑/左滑次数，地块巡查与土地升级共用，滑动坐标固定）
 - `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）

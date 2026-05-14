@@ -9,6 +9,8 @@
     "random_delay_max": 0.3,
     "click_offset_range": 5,
     "max_actions_per_round": 20,
+    "stuck_seconds": 60,
+    "stuck_long_wait_seconds": 120,
     "run_mode": "background",
     "debug_log_enabled": false
   },
