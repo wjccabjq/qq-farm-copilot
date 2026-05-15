@@ -540,20 +540,20 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
 
         return 'ready', land_coords, pending_plot_refs, detail_targets, seed_popup_land
 
-    def _plant_all(self, crop_name: str, warehouse_retry_round: int = 0) -> list[str]:
+    def _plant_all(self, crop_name: str, retry_round: int = 0) -> list[str]:
         """执行整块农田播种流程。"""
 
         warehouse_first = bool(self.config.planting.warehouse_first)
         skip_event_crops = bool(self.config.planting.skip_event_crops)
         use_warehouse_first = warehouse_first and not skip_event_crops
-        max_warehouse_retry_round = 6
+        max_retry_round = 6
         if warehouse_first and skip_event_crops:
             logger.info('自动播种: 仓库优先与排除活动作物同时开启，按关闭仓库优先处理')
-        if use_warehouse_first and warehouse_retry_round > max_warehouse_retry_round:
+        if retry_round > max_retry_round:
             logger.warning(
-                '自动播种: 仓库优先重试次数超限，结束本轮播种 | 当前轮次={} 上限={}',
-                warehouse_retry_round,
-                max_warehouse_retry_round,
+                '自动播种: 重试次数超限，结束本轮播种 | 当前轮次={} 上限={}',
+                retry_round,
+                max_retry_round,
             )
             return []
 
@@ -578,14 +578,14 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                 if not buy_result:
                     logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
                     return []
-                return self._plant_all(crop_name, warehouse_retry_round=warehouse_retry_round + 1)
+                return self._plant_all(crop_name, retry_round=retry_round + 1)
             if use_warehouse_first:
                 logger.info('自动播种: 未发现种子候选框，尝试购买种子并重试 | 作物={}', crop_name)
                 buy_result = self._buy_seeds(crop_name)
                 if not buy_result:
                     logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
                     return []
-                return self._plant_all(crop_name, warehouse_retry_round=warehouse_retry_round + 1)
+                return self._plant_all(crop_name, retry_round=retry_round + 1)
             return []
         if prepare_status != 'ready' or seed_popup_land is None:
             logger.warning('自动播种: 播种准备状态异常 | status={}', prepare_status)
@@ -602,7 +602,7 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                 if not buy_result:
                     logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
                     return []
-                return self._plant_all(crop_name, warehouse_retry_round=warehouse_retry_round + 1)
+                return self._plant_all(crop_name, retry_round=retry_round + 1)
 
             excluded_indexes = self._collect_excluded_seed_item_indexes(number_items)
             ordered_indexes = sorted(
@@ -618,7 +618,7 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                 if not buy_result:
                     logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
                     return []
-                return self._plant_all(crop_name, warehouse_retry_round=warehouse_retry_round + 1)
+                return self._plant_all(crop_name, retry_round=retry_round + 1)
 
             selected_index = int(available_indexes[0])
             selected_item = number_items[selected_index]
@@ -637,22 +637,20 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                 return []
 
         self._drag_seed_to_lands(seed_drag_point, land_coords)
-        if use_warehouse_first:
-            self.ui.device.click_button(GOTO_MAIN)
-            self.ui.device.sleep(0.2)
-            self.align_view_by_background_tree(log_prefix='自动播种: 播后复检')
-            remain_land_coords, _, _ = self._collect_pending_plant_land_coords(include_detail_targets=False)
-            if detail_targets:
-                planted_refs = self._resolve_planted_plot_refs_by_live_coords(detail_targets, remain_land_coords)
-                self.backfill_land_flag_false(planted_refs, 'need_planting', log_prefix='自动播种')
-            if remain_land_coords:
-                logger.info(
-                    '自动播种: 播后仍有空地，重新执行播种流程 | 剩余数量={} 重试轮次={}',
-                    len(remain_land_coords),
-                    warehouse_retry_round + 1,
-                )
-                return self._plant_all(crop_name, warehouse_retry_round=warehouse_retry_round + 1)
-            return []
-
-        self.backfill_land_flag_false(pending_plot_refs, 'need_planting', log_prefix='自动播种')
+        self.ui.device.click_button(GOTO_MAIN)
+        self.ui.device.sleep(0.2)
+        self.align_view_by_background_tree(log_prefix='自动播种: 播后复检')
+        remain_land_coords, _, _ = self._collect_pending_plant_land_coords(include_detail_targets=False)
+        if detail_targets:
+            planted_refs = self._resolve_planted_plot_refs_by_live_coords(detail_targets, remain_land_coords)
+            self.backfill_land_flag_false(planted_refs, 'need_planting', log_prefix='自动播种')
+        elif pending_plot_refs:
+            self.backfill_land_flag_false(pending_plot_refs, 'need_planting', log_prefix='自动播种')
+        if remain_land_coords:
+            logger.info(
+                '自动播种: 播后仍有空地，重新执行播种流程 | 剩余数量={} 重试轮次={}',
+                len(remain_land_coords),
+                retry_round + 1,
+            )
+            return self._plant_all(crop_name, retry_round=retry_round + 1)
         return []
