@@ -33,6 +33,7 @@
 - 定时收获任务：`config.tasks.timed_harvest`（默认开启；`trigger=daily`，默认 `daily_times=["00:00"]`；`features.aggregation_seconds` 默认 `60` 秒；依赖地块巡查结果生成后续执行点）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出；`config.safety.stuck_seconds`（默认 `60` 秒）与 `config.safety.stuck_long_wait_seconds`（默认 `120` 秒）控制无有效点击的卡死判定阈值
 - 异常恢复配置：`config.recovery`（`task_restart_attempts/task_retry_delay_seconds/window_launch_wait_timeout_seconds/startup_retry_step_sleep_seconds/startup_stabilize_timeout_seconds`）
+- 通知配置：`config.notification`（`exception_notify_enabled/win_toast_enabled/onepush_config`；仅在触发人工接管停机时发送异常通知）
 - 全局日志保留：`%APPDATA%/QQFarmCopilot/app_settings.json -> logging.retention_days`（单位天，默认 `7`；启动与全局设置变更时清理过期 `.log`）
 - 截图频率：`config.screenshot.capture_interval_seconds`（默认 `0.3` 秒；`0` 表示不限制最小截图间隔）
 - 播种稳定超时：`config.planting.planting_stable_timeout_seconds`（默认 `3.0` 秒；用于背景树锚点稳定等待超时）
@@ -236,6 +237,7 @@
 - 不要把任务列表改回 `models/config.py` 固定字段模型。
 - 不要将 `appear_then_click` 的最小 `interval` 改成小于 `1`。
 - 不要用会中断调度链路的业务状态去“跳过下次执行时间计算”。
+- 对强类型模型（如 `AppConfig`、`TaskViews`、各 `ConfigModel`）禁止使用 `getattr`/反射式字段读取；必须使用显式属性访问。仅第三方不稳定对象（外部库返回值）允许最小限度的 `try/except` 兼容处理。
 
 ## 8. 提交前检查（最低）
 

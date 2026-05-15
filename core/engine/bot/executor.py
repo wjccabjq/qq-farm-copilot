@@ -50,6 +50,7 @@ from tasks.share import TaskShare
 from tasks.timed_harvest import TaskTimedHarvest
 from utils.app_paths import load_config_json_object
 from utils.feature_policy import get_forced_off_features
+from utils.notify import send_exception_notification
 
 
 class BotExecutorMixin:
@@ -1129,6 +1130,14 @@ class BotExecutorMixin:
         self._fatal_error_stop_requested = True
         message = str(reason or '检测到致命异常，请手动处理')
         logger.critical(message)
+        try:
+            send_exception_notification(
+                config=self.config,
+                instance_id=str(getattr(self, '_instance_id', 'default') or 'default'),
+                reason=message,
+            )
+        except Exception as exc:
+            logger.debug(f'exception notify failed: {exc}')
 
         def _stop_engine():
             try:

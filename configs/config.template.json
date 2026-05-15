@@ -161,6 +161,11 @@
     "startup_retry_step_sleep_seconds": 0.5,
     "startup_stabilize_timeout_seconds": 90.0
   },
+  "notification": {
+    "exception_notify_enabled": false,
+    "win_toast_enabled": true,
+    "onepush_config": ""
+  },
   "planting": {
     "strategy": "latest_level",
     "warehouse_first": true,

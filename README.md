@@ -34,7 +34,7 @@
 - [x] 任务调度时间自定义
 - [x] 数据统计
 - [x] 一键启动
-- [ ] 异常发送通知
+- [x] 异常发送通知
 - [x] 异常自动重启
 - [x] 定时重启窗口
 - [x] 支持QQ/微信平台后台运行
@@ -156,6 +156,7 @@ python main.py
 - `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置；`virtual_desktop_index` 为目标虚拟桌面序号，`0` 表示不移动）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（与仓库优先同时开启时，按关闭仓库优先处理；固定排除作物始终生效）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）、`land_swipe_right_times/land_swipe_left_times`（土地相关流程右滑/左滑次数，地块巡查与土地升级共用，滑动坐标固定）
 - `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）
 - `recovery`：异常恢复策略；`task_restart_attempts`（任务异常重启窗口次数）、`task_retry_delay_seconds`（重启后重试延迟秒数）、`window_launch_wait_timeout_seconds`（每轮等待窗口出现超时）、`startup_retry_step_sleep_seconds`（启动重试轮询步进）、`startup_stabilize_timeout_seconds`（启动收敛总超时）
+- `notification`：异常通知配置；`exception_notify_enabled`（是否在异常停机时推送通知）、`win_toast_enabled`（是否发送 Windows 本地通知，依赖 `winotify`）、`onepush_config`（可选 OnePush YAML 配置文本）
 - `executor.task_order`：任务固定顺序配置（示例：`land_scan>timed_harvest>main>friend>sell>reward>gift>event_shop>share>restart`）
 - `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold|amethyst", "maturity_countdown": "HH:MM:SS", "countdown_sync_time": "YYYY-MM-DD HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`countdown_sync_time` 为该地块倒计时采样时间；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典

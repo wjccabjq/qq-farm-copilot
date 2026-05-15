@@ -440,6 +440,20 @@ class RecoveryConfig(ConfigModel):
         return max(5.0, seconds)
 
 
+class NotificationConfig(ConfigModel):
+    """定义异常通知配置。"""
+
+    exception_notify_enabled: bool = False
+    win_toast_enabled: bool = True
+    onepush_config: str = ''
+
+    @field_validator('onepush_config', mode='before')
+    @classmethod
+    def _normalize_onepush_config(cls, value):
+        """规范化 OnePush 配置文本。"""
+        return str(value or '').strip()
+
+
 class PlantingConfig(ConfigModel):
     """定义 `PlantingConfig` 的配置数据结构与默认值。"""
 
@@ -736,6 +750,7 @@ class AppConfig(ConfigModel):
     tasks: dict[str, TaskScheduleItemConfig] = Field(default_factory=dict)
     executor: ExecutorConfig = Field(default_factory=ExecutorConfig)
     recovery: RecoveryConfig = Field(default_factory=RecoveryConfig)
+    notification: NotificationConfig = Field(default_factory=NotificationConfig)
     planting: PlantingConfig = Field(default_factory=PlantingConfig)
     land: LandDetailConfig = Field(default_factory=LandDetailConfig)
     sell: SellConfig = Field(default_factory=SellConfig)

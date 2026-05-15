@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loguru import logger
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QFileDialog, QFormLayout, QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFileDialog, QFormLayout, QFrame, QHBoxLayout, QSizePolicy, QTextEdit, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -13,11 +14,16 @@ from qfluentwidgets import (
     ComboBox,
     DoubleSpinBox,
     FluentIcon,
+    HyperlinkLabel,
+    InfoBar,
+    InfoBarPosition,
     LineEdit,
     PushButton,
     ScrollArea,
     SpinBox,
     ToolButton,
+    isDarkTheme,
+    qconfig,
 )
 
 from core.platform.window_manager import DisplayInfo, WindowInfo, WindowManager
@@ -25,12 +31,16 @@ from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCa
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import get_best_crop_for_level, get_crop_picker_items, get_latest_crop_for_level
 from utils.app_paths import user_app_dir
+from utils.notify import NotifySendResult, send_exception_notification_detailed
+
+ONEPUSH_HELP_URL = 'https://github.com/LmeSzinc/AzurLaneAutoScript/wiki/Onepush-configuration-%5BCN%5D'
 
 
 class SettingsPanel(QWidget):
     """实例设置编辑面板。"""
 
     config_changed = pyqtSignal(object)
+    runtime_log = pyqtSignal(str)
 
     def __init__(self, config: AppConfig, parent=None):
         super().__init__(parent)
@@ -40,6 +50,7 @@ class SettingsPanel(QWidget):
         self._loading = True
         self._build_ui()
         self._load()
+        qconfig.themeChangedFinished.connect(self._apply_notify_editor_style)
         self._loading = False
 
     def _build_ui(self) -> None:
@@ -243,6 +254,51 @@ class SettingsPanel(QWidget):
         window_position_tip.setStyleSheet('color: #d97706;')
         env_form.addRow(self._field_label('', env_card), window_position_tip)
 
+        notify_card, notify_form = self._build_group_card(
+            content,
+            title='通知',
+            object_name='settingsNotifyCard',
+        )
+        layout.addWidget(notify_card)
+
+        self.notify_exception_enabled = CheckBox('异常停止时发送通知', notify_card)
+        notify_form.addRow(self._field_label('异常通知', notify_card), self.notify_exception_enabled)
+
+        self.notify_win_toast_enabled = CheckBox('Windows 系统通知', notify_card)
+        notify_form.addRow(self._field_label('本地通知', notify_card), self.notify_win_toast_enabled)
+
+        notify_onepush_col = QWidget(notify_card)
+        notify_onepush_col_layout = QVBoxLayout(notify_onepush_col)
+        notify_onepush_col_layout.setContentsMargins(0, 0, 0, 0)
+        notify_onepush_col_layout.setSpacing(4)
+        self.notify_onepush_config = QTextEdit(notify_card)
+        self.notify_onepush_config.setObjectName('notifyOnePushEditor')
+        self.notify_onepush_config.setMinimumHeight(60)
+        self.notify_onepush_config.setMaximumHeight(110)
+        notify_onepush_col_layout.addWidget(self.notify_onepush_config)
+        self._apply_notify_editor_style()
+        self.notify_onepush_tip = CaptionLabel(
+            '填写后会额外使用 onepush 配置发送一条通知。使用 provider=onebot11 可启用 OneBot 文本+图片通知。',
+            notify_card,
+        )
+        self.notify_onepush_tip.setWordWrap(True)
+        self.notify_onepush_tip.setStyleSheet('color: #d97706;')
+        notify_onepush_col_layout.addWidget(self.notify_onepush_tip)
+        self.notify_onepush_help = HyperlinkLabel(notify_card)
+        self.notify_onepush_help.setText('OnePush 配置教程')
+        self.notify_onepush_help.setUrl(ONEPUSH_HELP_URL)
+        notify_onepush_col_layout.addWidget(self.notify_onepush_help, 0, Qt.AlignmentFlag.AlignLeft)
+        notify_form.addRow(self._field_label('OnePush 配置', notify_card), notify_onepush_col)
+
+        notify_test_row = QWidget(notify_card)
+        notify_test_layout = QHBoxLayout(notify_test_row)
+        notify_test_layout.setContentsMargins(0, 0, 0, 0)
+        notify_test_layout.setSpacing(4)
+        self.notify_test_btn = PushButton('测试通知', notify_test_row)
+        notify_test_layout.addWidget(self.notify_test_btn)
+        notify_test_layout.addStretch(1)
+        notify_form.addRow(self._field_label('通知测试', notify_card), notify_test_row)
+
         advanced_card, advanced_form = self._build_group_card(
             content,
             title='高级',
@@ -402,6 +458,8 @@ class SettingsPanel(QWidget):
             self.window_screen.currentIndexChanged,
             self.window_position.currentIndexChanged,
             self.virtual_desktop.currentIndexChanged,
+            self.notify_exception_enabled.toggled,
+            self.notify_win_toast_enabled.toggled,
             self.delay_min.valueChanged,
             self.delay_max.valueChanged,
             self.offset.valueChanged,
@@ -418,6 +476,9 @@ class SettingsPanel(QWidget):
             self.debug.toggled,
         ):
             sig.connect(self._save)
+        self.notify_onepush_config.textChanged.connect(self._save)
+        self.notify_exception_enabled.toggled.connect(self._sync_notification_controls)
+        self.notify_test_btn.clicked.connect(self._on_test_notification_clicked)
         self.level.valueChanged.connect(self._on_level_changed)
         self.strategy.currentIndexChanged.connect(self._on_strategy_changed)
         self.shortcut_path.editingFinished.connect(self._save)
@@ -455,6 +516,55 @@ class SettingsPanel(QWidget):
             label.setFixedWidth(label.sizeHint().width() + label.fontMetrics().horizontalAdvance('字'))
             label.setStyleSheet('color: #475569; font-weight: 600;')
         return label
+
+    def _apply_notify_editor_style(self, *_args) -> None:
+        """对齐当前项目滚动条样式（沿用日志面板样式）。"""
+        if not hasattr(self, 'notify_onepush_config'):
+            return
+
+        if isDarkTheme():
+            text = '#e5e7eb'
+            border = 'rgba(255, 255, 255, 0.16)'
+            bg = 'rgba(18, 18, 20, 0.86)'
+            selection = 'rgba(59, 130, 246, 0.45)'
+            sb_handle = 'rgba(148, 163, 184, 0.46)'
+            sb_handle_hover = 'rgba(148, 163, 184, 0.68)'
+        else:
+            text = '#1e293b'
+            border = 'rgba(15, 23, 42, 0.12)'
+            bg = '#f8fafc'
+            selection = 'rgba(59, 130, 246, 0.24)'
+            sb_handle = 'rgba(100, 116, 139, 0.36)'
+            sb_handle_hover = 'rgba(100, 116, 139, 0.58)'
+
+        self.notify_onepush_config.setStyleSheet(
+            f"""
+QTextEdit#notifyOnePushEditor {{
+    color: {text};
+    background-color: {bg};
+    border: 1px solid {border};
+    border-radius: 10px;
+    padding: 8px 10px;
+    selection-background-color: {selection};
+}}
+QScrollBar:vertical {{
+    width: 10px;
+    background: transparent;
+    margin: 4px 2px 4px 2px;
+}}
+QScrollBar::handle:vertical {{
+    min-height: 24px;
+    border-radius: 4px;
+    background: {sb_handle};
+}}
+QScrollBar::handle:vertical:hover {{
+    background: {sb_handle_hover};
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0px;
+}}
+"""
+        )
 
     def _build_group_card(
         self,
@@ -679,6 +789,10 @@ class SettingsPanel(QWidget):
         self.land_swipe_left_times.setValue(int(c.planting.land_swipe_left_times))
         self.debug.setChecked(bool(c.safety.debug_log_enabled))
         self.logs_path_label.setText(self._resolve_logs_path_text())
+        self.notify_exception_enabled.setChecked(bool(c.notification.exception_notify_enabled))
+        self.notify_win_toast_enabled.setChecked(bool(c.notification.win_toast_enabled))
+        self.notify_onepush_config.setPlainText(str(c.notification.onepush_config or ''))
+        self._sync_notification_controls()
         self._refresh_windows()
         self._set_combo_data(self.window_select, c.window_select_rule or 'auto')
         self._on_strategy_changed()
@@ -722,8 +836,88 @@ class SettingsPanel(QWidget):
         c.planting.land_swipe_right_times = int(self.land_swipe_right_times.value())
         c.planting.land_swipe_left_times = int(self.land_swipe_left_times.value())
         c.safety.debug_log_enabled = bool(self.debug.isChecked())
+        c.notification.exception_notify_enabled = bool(self.notify_exception_enabled.isChecked())
+        c.notification.win_toast_enabled = bool(self.notify_win_toast_enabled.isChecked())
+        c.notification.onepush_config = str(self.notify_onepush_config.toPlainText() or '').strip()
         c.save()
         self.config_changed.emit(c)
+
+    def _sync_notification_controls(self) -> None:
+        """根据异常通知总开关同步通知子项可编辑状态。"""
+        enabled = bool(self.notify_exception_enabled.isChecked())
+        self.notify_win_toast_enabled.setEnabled(enabled)
+        self.notify_onepush_config.setEnabled(enabled)
+
+    def _resolve_instance_id_for_notify(self) -> str:
+        """根据当前配置路径推断实例 ID。"""
+        config_path = str(getattr(self.config, '_config_path', '') or '').strip()
+        if config_path:
+            try:
+                cfg_path = Path(config_path).resolve()
+                if cfg_path.name.lower() == 'config.json' and cfg_path.parent.name == 'configs':
+                    return str(cfg_path.parent.parent.name or 'default')
+            except Exception:
+                pass
+        return 'default'
+
+    def _on_test_notification_clicked(self) -> None:
+        """发送一次异常通知测试。"""
+        self._save()
+        if not bool(self.notify_exception_enabled.isChecked()):
+            self.runtime_log.emit('通知测试: 异常通知总开关未开启，已跳过')
+            self._toast('warning', '通知测试', '请先开启“异常停止时发送通知”。')
+            return
+
+        instance_id = self._resolve_instance_id_for_notify()
+        result = NotifySendResult(win_status='failed', onepush_status='failed')
+        sink_id = logger.add(
+            lambda message: self.runtime_log.emit(str(message).strip()),
+            level='INFO',
+            format='{time:HH:mm:ss} | {level:<7} | {message}',
+        )
+        try:
+            result = send_exception_notification_detailed(
+                config=self.config,
+                instance_id=instance_id,
+                reason='通知测试：这是一条异常停止通知测试消息。',
+            )
+        except Exception:
+            logger.exception(f'通知测试: 发送异常 | 实例={instance_id}')
+            result = NotifySendResult(win_status='failed', onepush_status='failed')
+        finally:
+            logger.remove(sink_id)
+
+        self._show_channel_test_toast(channel='Windows', status=result.win_status)
+        self._show_channel_test_toast(channel='OnePush', status=result.onepush_status)
+
+    def _show_channel_test_toast(self, *, channel: str, status: str) -> None:
+        """按渠道显示测试通知结果。"""
+        silent_statuses = {'disabled', 'not_windows', 'skipped'}
+        if str(status) in silent_statuses:
+            return
+        text_map = {
+            'success': ('success', f'{channel} 通知发送成功'),
+            'failed': ('error', f'{channel} 通知发送失败'),
+            'unconfigured': ('warning', f'{channel} 未配置'),
+        }
+        level, text = text_map.get(str(status), ('warning', f'{channel} 状态未知: {status}'))
+        self._toast(level, '通知测试', text)
+
+    def _toast(self, level: str, title: str, text: str, duration: int = 2600) -> None:
+        """显示右上角 Toast。"""
+        method = {
+            'success': InfoBar.success,
+            'warning': InfoBar.warning,
+            'error': InfoBar.error,
+            'info': InfoBar.info,
+        }.get(level, InfoBar.info)
+        method(
+            title=title,
+            content=text,
+            duration=duration,
+            parent=self,
+            position=InfoBarPosition.TOP_RIGHT,
+        )
 
     def set_config(self, config: AppConfig) -> None:
         self.config = config
