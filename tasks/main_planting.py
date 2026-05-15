@@ -513,18 +513,56 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
             return 'no_land', [], [], [], None
 
         before_labor_anchor = self._get_labor_anchor_location()
-        seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
-        selected_plot_ref = self._resolve_plot_ref_by_point(detail_targets, seed_popup_land)
-        if selected_plot_ref is None and len(pending_plot_refs) == 1:
-            selected_plot_ref = str(pending_plot_refs[0])
-        open_seed_popup_status = self._open_seed_popup(seed_popup_land)
-        if open_seed_popup_status == 'already_planted':
+        candidate_land_coords = list(land_coords)
+        blocked_land_coords: list[tuple[int, int]] = []
+        seed_popup_land: tuple[int, int] | None = None
+        while candidate_land_coords:
+            seed_popup_land = self._select_center_land_coord(candidate_land_coords) or candidate_land_coords[0]
+            selected_plot_ref = self._resolve_plot_ref_by_point(detail_targets, seed_popup_land)
+            if selected_plot_ref is None and len(pending_plot_refs) == 1:
+                selected_plot_ref = str(pending_plot_refs[0])
+
+            open_seed_popup_status = self._open_seed_popup(seed_popup_land)
+            if open_seed_popup_status == 'opened':
+                land_coords = list(candidate_land_coords)
+                break
+            if open_seed_popup_status != 'already_planted':
+                logger.warning('自动播种: 打开种子候选框失败')
+                return 'no_seed_popup', land_coords, pending_plot_refs, detail_targets, None
+
+            old_count = len(candidate_land_coords)
+            blocked_land_coords.append((int(seed_popup_land[0]), int(seed_popup_land[1])))
             if selected_plot_ref:
                 self.backfill_land_flag_false([selected_plot_ref], 'need_planting', log_prefix='自动播种: 已种植回填')
-            return 'already_planted', land_coords, pending_plot_refs, detail_targets, None
-        if open_seed_popup_status != 'opened':
-            logger.warning('自动播种: 打开种子候选框失败')
-            return 'no_seed_popup', land_coords, pending_plot_refs, detail_targets, None
+            self.ui.device.click_button(GOTO_MAIN)
+            self.align_view_by_background_tree(log_prefix='自动播种: 已种植地块后回正')
+            refreshed_land_coords, refreshed_pending_plot_refs, refreshed_detail_targets = (
+                self._collect_pending_plant_land_coords()
+            )
+            if selected_plot_ref:
+                refreshed_pending_plot_refs = [
+                    ref for ref in refreshed_pending_plot_refs if str(ref) != selected_plot_ref
+                ]
+                refreshed_detail_targets = [
+                    item for item in refreshed_detail_targets if str(item[0]) != selected_plot_ref
+                ]
+            candidate_land_coords = [
+                point
+                for point in refreshed_land_coords
+                if all(math.hypot(float(point[0] - bx), float(point[1] - by)) > 14.0 for bx, by in blocked_land_coords)
+            ]
+            pending_plot_refs = [str(ref) for ref in refreshed_pending_plot_refs]
+            detail_targets = list(refreshed_detail_targets)
+            logger.info(
+                '自动播种: 点击地块已种植，已回正并重采样后重试 | 坐标={} 剩余候选={} 原候选={}',
+                seed_popup_land,
+                len(candidate_land_coords),
+                old_count,
+            )
+
+        if seed_popup_land is None or not candidate_land_coords:
+            logger.info('自动播种: 候选地块均不可播种，结束本轮')
+            return 'no_land', [], [], [], None
 
         after_labor_anchor = self._wait_labor_anchor_stable()
         if before_labor_anchor is not None and after_labor_anchor is not None:
