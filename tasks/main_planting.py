@@ -512,7 +512,7 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
             logger.info('自动播种: 未发现空土地，跳过播种')
             return 'no_land', [], [], [], None
 
-        before_labor_anchor = self._get_labor_anchor_location()
+        before_labor_anchor: tuple[int, int] | None = None
         candidate_land_coords = list(land_coords)
         blocked_land_coords: list[tuple[int, int]] = []
         seed_popup_land: tuple[int, int] | None = None
@@ -522,6 +522,8 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
             if selected_plot_ref is None and len(pending_plot_refs) == 1:
                 selected_plot_ref = str(pending_plot_refs[0])
 
+            # 每轮点击前记录锚点；若中途经历“已种植->回正->重采样”，下一轮会刷新基准，避免漂移累积。
+            before_labor_anchor = self._get_labor_anchor_location()
             open_seed_popup_status = self._open_seed_popup(seed_popup_land)
             if open_seed_popup_status == 'opened':
                 land_coords = list(candidate_land_coords)
@@ -570,7 +572,14 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
             dy = float(after_labor_anchor[1] - before_labor_anchor[1])
             drift = math.hypot(dx, dy)
             if drift > 3.0:
-                logger.info('自动播种: 画面偏移 {:.1f}px，已修正播种坐标', drift)
+                logger.info(
+                    '自动播种: 画面偏移 {:.1f}px，已修正播种坐标 | before={} after={} dx={:.1f} dy={:.1f}',
+                    drift,
+                    before_labor_anchor,
+                    after_labor_anchor,
+                    dx,
+                    dy,
+                )
             land_coords = self._shift_land_coords(land_coords, dx, dy)
             seed_popup_land = (int(round(seed_popup_land[0] + dx)), int(round(seed_popup_land[1] + dy)))
         else:
