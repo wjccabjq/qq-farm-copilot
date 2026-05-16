@@ -18,12 +18,23 @@ from tasks.base import TaskBase
 
 # 聚合窗口附加缓冲秒数：覆盖窗口尾部成熟地块。
 TIMED_HARVEST_WINDOW_BUFFER_SECONDS = 3
-TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS = 5.0
+TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS = 3
 TIMED_HARVEST_DEADLINE_EXTEND_SECONDS = 5
+TIMED_HARVEST_INITIAL_DEADLINE_MAX_SECONDS = 15
 
 
 class TaskTimedHarvest(TaskBase):
     """按调度在聚合窗口内持续执行一键收获。"""
+
+    @staticmethod
+    def _pick_regular_group(
+        groups: list[tuple[datetime, datetime]], *, now: datetime
+    ) -> tuple[datetime, datetime] | None:
+        """常规分组选择：取第一个结束时间尚未过去的分组。"""
+        for group_start, group_end in groups:
+            if group_end >= now:
+                return group_start, group_end
+        return None
 
     @classmethod
     def _collect_maturity_points(cls, plots: list[dict[str, Any]]) -> list[datetime]:
@@ -146,20 +157,17 @@ class TaskTimedHarvest(TaskBase):
             self.config.land.plots,
             aggregation_seconds=aggregation_seconds,
         )
-        active_group: tuple[datetime, datetime] | None = None
-        for group_start, group_end in groups:
-            if group_end >= now:
-                active_group = (group_start, group_end)
-                break
-
+        active_group = self._pick_regular_group(groups, now=now)
         if active_group is not None:
-            group_start, group_end = active_group
-            deadline = group_end + timedelta(seconds=TIMED_HARVEST_WINDOW_BUFFER_SECONDS)
+            _, group_end = active_group
+            computed_deadline = group_end + timedelta(seconds=TIMED_HARVEST_WINDOW_BUFFER_SECONDS)
+            if computed_deadline <= now:
+                deadline = now + timedelta(seconds=TIMED_HARVEST_INITIAL_DEADLINE_MAX_SECONDS)
+            else:
+                max_deadline = now + timedelta(seconds=TIMED_HARVEST_INITIAL_DEADLINE_MAX_SECONDS)
+                deadline = min(computed_deadline, max_deadline)
         else:
-            group_start = None
-            group_end = None
             deadline = now + timedelta(seconds=TIMED_HARVEST_WINDOW_BUFFER_SECONDS)
-
         total_window_seconds = max(0, int(math.ceil((deadline - now).total_seconds())))
         action_count = 0
         goto_main_click_timer = Timer(TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS, count=0)

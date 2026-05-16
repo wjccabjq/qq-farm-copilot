@@ -659,6 +659,15 @@ class BotExecutorMixin:
             return self._seconds_to_next_daily(cfg.daily_times, current)
         return max(min_interval, int(cfg.interval_seconds))
 
+    def _resolve_timed_harvest_priority_window_seconds(self) -> int:
+        """读取定时收获优先窗口（秒）。"""
+        try:
+            feature = self.build_task_view('timed_harvest').feature
+            value = int(feature.priority_window_seconds)
+        except Exception:
+            value = 120
+        return max(0, value)
+
     def is_task_enabled(self, task_name: str, *, runtime: bool = True) -> bool:
         """读取任务启用状态（可选返回运行时执行器状态）。"""
         name = str(task_name or '').strip()
@@ -850,6 +859,7 @@ class BotExecutorMixin:
             runners=runners,
             on_snapshot=self._on_executor_snapshot,
             on_task_done=self._on_executor_task_done,
+            timed_harvest_judge_interval_resolver=self._resolve_timed_harvest_priority_window_seconds,
         )
         self._task_executor.start()
 

@@ -62,7 +62,7 @@
 - `event_shop`：活动商店任务（默认开启；每日 `10:01`、`20:01` 执行；领取商城免费物品）
 - `sell`：独立出售任务（仓库批量出售）
 - `land_scan`：地块巡查任务（默认关闭；每 30 分钟；按实例配置的左右滑动次数分段点击地块并 OCR 采集）
-- `timed_harvest`：定时收获任务（默认开启；每日 `00:00` 启动计算；依赖地块巡查结果并按聚合时间生成后续收获执行点）
+- `timed_harvest`：定时收获任务（默认开启；每日 `00:00` 启动计算；依赖地块巡查结果并按聚合时间生成后续收获执行点；支持 `features.priority_window_seconds` 调度判断间隔）
 - `restart`：定时重启任务（默认关闭；每 4 小时；重启窗口并收敛回主页面）
 
 ## 后台/多开说明
@@ -277,7 +277,8 @@ python main.py
     "enabled_time_range": "00:00:00-23:59:59",
     "failure_interval_seconds": 300,
     "features": {
-      "aggregation_seconds": 60
+      "aggregation_seconds": 60,
+      "priority_window_seconds": 120
     }
   },
   "restart": {
@@ -307,6 +308,7 @@ python main.py
 调度规则：
 
 - 到期任务按 `executor.task_order` 从左到右执行（`>` 分隔）
+- 当 `timed_harvest` 被更早任务阻塞且 `next_run` 时间差不超过 `features.priority_window_seconds` 时，执行器会将阻塞任务 `next_run` 顺延至少 `1` 秒，再按 `executor.task_order` 选取任务，使 `timed_harvest` 优先执行
 - 任务执行后按成功/失败间隔或 `TaskResult.next_run_seconds` 计算下一次执行
 - `INTERVAL` 任务仅在 `enabled_time_range` 内执行；不在时间段内会跳过本轮并延迟到下个启用时段起点
 - `interval_seconds` / `failure_interval_seconds` 生效下限为 `executor.min_task_interval_seconds`（默认 `5` 秒）

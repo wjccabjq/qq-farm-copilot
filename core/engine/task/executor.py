@@ -8,12 +8,14 @@ from datetime import datetime, timedelta
 from typing import Callable
 
 from loguru import logger
+
 from core.engine.task.registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
 from models.config import TaskTriggerType, normalize_task_enabled_time_range
 
 TaskRunner = Callable[[TaskContext], TaskResult]
 SnapshotHook = Callable[[TaskSnapshot], None]
 TaskDoneHook = Callable[[str, TaskResult], None]
+TimedHarvestJudgeIntervalResolver = Callable[[], int]
 
 
 class TaskExecutor:
@@ -26,12 +28,14 @@ class TaskExecutor:
         *,
         on_snapshot: SnapshotHook | None = None,
         on_task_done: TaskDoneHook | None = None,
+        timed_harvest_judge_interval_resolver: TimedHarvestJudgeIntervalResolver | None = None,
     ):
         """注入任务定义、执行回调和事件钩子，准备调度线程状态。"""
         self._tasks = tasks
         self._runners = runners
         self._on_snapshot = on_snapshot
         self._on_task_done = on_task_done
+        self._timed_harvest_judge_interval_resolver = timed_harvest_judge_interval_resolver
 
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
@@ -142,6 +146,7 @@ class TaskExecutor:
 
     def _snapshot_locked(self, now: datetime) -> TaskSnapshot:
         """在持锁状态下构建任务快照，避免并发读写不一致。"""
+        self._delay_blocking_tasks_for_timed_harvest(now)
         pending: list[TaskItem] = []
         waiting: list[TaskItem] = []
         for task in self._tasks.values():
@@ -358,3 +363,54 @@ class TaskExecutor:
             if tail in {TaskTriggerType.INTERVAL.value, TaskTriggerType.DAILY.value}:
                 return tail
         return lowered
+
+    def _resolve_timed_harvest_priority_window_seconds(self) -> int:
+        """读取“定时收获优先窗口”（秒）。"""
+        resolver = self._timed_harvest_judge_interval_resolver
+        if resolver is None:
+            return 120
+        try:
+            seconds = int(resolver())
+        except Exception:
+            seconds = 120
+        return max(0, seconds)
+
+    def _delay_blocking_tasks_for_timed_harvest(self, now: datetime) -> None:
+        """当定时收获被更早任务阻塞且在判断间隔内时，顺延阻塞任务 next_run。"""
+        pending: list[TaskItem] = []
+        for task in self._tasks.values():
+            if not task.enabled:
+                continue
+            if task.next_run <= now:
+                pending.append(task)
+
+        if len(pending) <= 1:
+            return
+
+        pending.sort(key=lambda t: t.order_index)
+        timed_index = -1
+        for index, item in enumerate(pending):
+            if item.name == 'timed_harvest':
+                timed_index = index
+                break
+        if timed_index <= 0:
+            return
+
+        priority_window_seconds = self._resolve_timed_harvest_priority_window_seconds()
+        if priority_window_seconds <= 0:
+            return
+
+        timed_task = pending[timed_index]
+        delayed_count = 0
+        for item in pending[:timed_index]:
+            delta_seconds = (timed_task.next_run - item.next_run).total_seconds()
+            if 0 < delta_seconds <= float(priority_window_seconds):
+                item.next_run = max(now + timedelta(seconds=1), timed_task.next_run + timedelta(seconds=1))
+                delayed_count += 1
+
+        if delayed_count > 0:
+            logger.debug(
+                'timed_harvest delayed blocking tasks: count={} timed_next_run={}',
+                delayed_count,
+                timed_task.next_run.strftime('%Y-%m-%d %H:%M:%S'),
+            )
