@@ -19,5 +19,9 @@ class WindowCaptureError(RuntimeError):
     """窗口截图链路持续失败（如 PrintWindow/GetDIBits/GetWindowRect）。"""
 
 
+class WindowNotFoundError(RuntimeError):
+    """窗口查找/拉起失败，无法获取可用农场窗口。"""
+
+
 class BuySeedError(RuntimeError):
     """购买种子失败"""

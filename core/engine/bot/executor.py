@@ -23,6 +23,7 @@ from core.exceptions import (
     LoginRecoveryRequiredError,
     LoginRepeatError,
     WindowCaptureError,
+    WindowNotFoundError,
 )
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
 from models.config import (
@@ -290,6 +291,7 @@ class BotExecutorMixin:
                 DeviceStuckError,
                 DeviceTooManyClickError,
                 WindowCaptureError,
+                WindowNotFoundError,
             ),
         )
 
@@ -308,6 +310,8 @@ class BotExecutorMixin:
             return 'too_many_click'
         if isinstance(exc, WindowCaptureError):
             return 'print_window_failure'
+        if isinstance(exc, WindowNotFoundError):
+            return 'window_not_found'
         return 'task_exception'
 
     @classmethod
@@ -320,6 +324,8 @@ class BotExecutorMixin:
             return f'检测到设备卡死异常({task_name})，重启任务已达{restart_limit}次，已停止任务'
         if isinstance(exc, WindowCaptureError):
             return f'检测到截图异常({task_name})，重启任务已达{restart_limit}次，已停止任务'
+        if isinstance(exc, WindowNotFoundError):
+            return f'检测到窗口缺失异常({task_name})，重启任务已达{restart_limit}次，已停止任务'
         return f'任务异常({task_name}): {err_type}，重启任务已达{restart_limit}次，已停止任务'
 
     def _handle_startup_exception(self, *, exc: Exception) -> tuple[bool, str]:
@@ -587,7 +593,7 @@ class BotExecutorMixin:
 
         rect = self._prepare_window()
         if not rect:
-            return None, TaskResult(success=False, error='窗口未找到')
+            raise WindowNotFoundError(f'任务 `{task_name}` 执行前窗口未找到')
         if self.device:
             self.device.set_rect(rect)
         return rect, None
@@ -870,8 +876,8 @@ class BotExecutorMixin:
     def _run_task_main(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_main` 子流程。"""
         rect, err = self._prepare_task_scene('main')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskMain(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
@@ -879,8 +885,8 @@ class BotExecutorMixin:
     def _run_task_friend(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_friend` 子流程。"""
         rect, err = self._prepare_task_scene('friend')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskFriend(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
@@ -888,8 +894,8 @@ class BotExecutorMixin:
     def _run_task_share(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_share` 子流程。"""
         rect, err = self._prepare_task_scene('share')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskShare(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -897,8 +903,8 @@ class BotExecutorMixin:
     def _run_task_reward(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_reward` 子流程。"""
         rect, err = self._prepare_task_scene('reward')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskReward(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -906,8 +912,8 @@ class BotExecutorMixin:
     def _run_task_sell(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_sell` 子流程。"""
         rect, err = self._prepare_task_scene('sell')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskSell(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -915,8 +921,8 @@ class BotExecutorMixin:
     def _run_task_gift(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_gift` 子流程。"""
         rect, err = self._prepare_task_scene('gift')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskGift(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -924,8 +930,8 @@ class BotExecutorMixin:
     def _run_task_event_shop(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_event_shop` 子流程。"""
         rect, err = self._prepare_task_scene('event_shop')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskEventShop(engine=self, ui=self.ui)
         return task.run(rect=rect)
@@ -933,8 +939,8 @@ class BotExecutorMixin:
     def _run_task_land_scan(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_land_scan` 子流程。"""
         rect, err = self._prepare_task_scene('land_scan')
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskLandScan(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
@@ -942,8 +948,8 @@ class BotExecutorMixin:
     def _run_task_timed_harvest(self, _ctx: TaskContext) -> TaskResult:
         """执行 `task_timed_harvest` 子流程。"""
         rect, err = self._prepare_task_scene(self._TIMED_HARVEST_TASK)
-        if err is not None or rect is None:
-            return err or TaskResult(success=False, error='窗口未找到')
+        if err is not None:
+            return err
         self._reset_device_runtime_guards()
         task = TaskTimedHarvest(engine=self, ui=self.ui)
         return task.run(rect=rect)

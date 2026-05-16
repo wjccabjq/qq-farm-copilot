@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 from loguru import logger
 
 from core.base.button import Button
+from core.exceptions import WindowNotFoundError
 from core.platform.action_executor import ActionExecutor
 from core.platform.device import Device
 from core.platform.window_manager import WindowInfo
@@ -605,10 +606,13 @@ class BotRuntimeMixin:
         recovery_cfg = self.config.recovery
         stabilize_timeout = float(recovery_cfg.startup_stabilize_timeout_seconds)
         retry_step_sleep = float(recovery_cfg.startup_retry_step_sleep_seconds)
+        launch_retry_limit, launch_retry_delay = self._engine()._task_recovery_policy()
         deadline = time.perf_counter() + max(5.0, stabilize_timeout)
         step_sleep = max(0.1, retry_step_sleep)
         last_error = 'startup_state_unresolved'
         retry_count = 0
+        launch_retry_count = 0
+        launch_retry_sleep = max(0.1, float(launch_retry_delay))
         loop_count = 0
         last_progress_log_at = 0.0
         pos_value = self.config.planting.window_position.value
@@ -633,9 +637,24 @@ class BotRuntimeMixin:
                 emit_hint=False,
             )
             if window is None:
-                last_error = 'window_not_found'
-                time.sleep(step_sleep)
+                exc = WindowNotFoundError('启动阶段窗口未找到')
+                continue_loop, error_text = self._engine()._handle_startup_exception(exc=exc)
+                if not continue_loop:
+                    return False
+                launch_retry_count += 1
+                retry_count += 1
+                last_error = str(error_text or type(exc).__name__)
+                if launch_retry_count >= launch_retry_limit:
+                    logger.error(f'启动窗口拉起失败，重试已达上限({launch_retry_limit}) | {last_error}')
+                    return False
+                logger.info(
+                    f'启动窗口: 检测到启动恢复信号，继续重试启动流程 '
+                    f'(retry={retry_count}, launch_retry={launch_retry_count}/{launch_retry_limit}, loop={loop_count}) '
+                    f'| {last_error}'
+                )
+                time.sleep(launch_retry_sleep)
                 continue
+            launch_retry_count = 0
 
             current_hwnd = int(getattr(window, 'hwnd', 0) or 0)
             if current_hwnd > 0 and current_hwnd != last_window_hwnd:
@@ -715,22 +734,40 @@ class BotRuntimeMixin:
             logger.error('未找到 assets 按钮模板，请先运行 button_extract 工具')
             return False
 
-        launch_wait_timeout = self._resolve_window_launch_wait_timeout_seconds()
-        window, launched_by_shortcut = self._resolve_target_window(
-            allow_shortcut_launch=True,
-            wait_timeout=launch_wait_timeout,
-            poll_interval=self._WINDOW_LAUNCH_POLL_INTERVAL_SECONDS,
-            emit_hint=True,
-        )
-        if not window:
-            if str(self.config.window_shortcut_path or '').strip():
-                if launched_by_shortcut:
-                    logger.error('未找到QQ农场窗口，快捷方式启动后等待超时，请检查快捷方式是否可正常打开小程序')
-                else:
-                    logger.error('未找到QQ农场窗口，且快捷方式路径无效，请在设置中重新选择 .lnk 文件')
-            else:
-                logger.error('未找到QQ农场窗口，请先打开QQ农场小程序或配置快捷方式路径')
-            return False
+        window: WindowInfo | None = None
+        launch_retry_limit, launch_retry_delay = engine._task_recovery_policy()
+        attempt = 0
+        while window is None:
+            try:
+                launch_wait_timeout = self._resolve_window_launch_wait_timeout_seconds()
+                current_window, launched_by_shortcut = self._resolve_target_window(
+                    allow_shortcut_launch=True,
+                    wait_timeout=launch_wait_timeout,
+                    poll_interval=self._WINDOW_LAUNCH_POLL_INTERVAL_SECONDS,
+                    emit_hint=True,
+                )
+                if current_window is not None:
+                    window = current_window
+                    break
+                if str(self.config.window_shortcut_path or '').strip():
+                    if launched_by_shortcut:
+                        raise WindowNotFoundError(
+                            '未找到QQ农场窗口，快捷方式启动后等待超时，请检查快捷方式是否可正常打开小程序'
+                        )
+                    raise WindowNotFoundError('未找到QQ农场窗口，且快捷方式路径无效，请在设置中重新选择 .lnk 文件')
+                raise WindowNotFoundError('未找到QQ农场窗口，请先打开QQ农场小程序或配置快捷方式路径')
+            except Exception as exc:
+                attempt += 1
+                continue_loop, error_text = engine._handle_startup_exception(exc=exc)
+                if not continue_loop:
+                    return False
+                if attempt >= launch_retry_limit:
+                    logger.error(f'启动窗口拉起失败，重试已达上限({launch_retry_limit}) | {error_text}')
+                    return False
+                logger.warning(f'启动窗口拉起失败，准备重试({attempt}/{launch_retry_limit}) | {error_text}')
+                time.sleep(max(0.2, float(launch_retry_delay)))
+
+        assert window is not None
 
         display_metrics = self.window_manager.get_display_metrics(window.hwnd)
         if display_metrics:
